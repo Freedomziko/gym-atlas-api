@@ -26,7 +26,18 @@ const validateEquipmentDetails = ({ brand, series, name, type, resistance_profil
 	}
 };
 
-const createEquipment = async (brand, series, name, type, createdBy = null, resistanceProfile = 'constant', resistanceCurve = null) => {
+const createEquipment = async (
+	brand,
+	series,
+	name,
+	type,
+	createdBy = null,
+	brandId = null,
+	exerciseId = null,
+	secondaryExerciseId = null,
+	resistanceProfile = 'constant',
+	resistanceCurve = null
+) => {
 	validateEquipmentDetails({
 		brand,
 		series,
@@ -35,7 +46,18 @@ const createEquipment = async (brand, series, name, type, createdBy = null, resi
 		resistance_profile: resistanceProfile,
 		resistance_curve: resistanceCurve
 	});
-	return await equipmentRepo.createEquipment(brand, series || null, name, type || null, createdBy, resistanceProfile, resistanceCurve);
+	return await equipmentRepo.createEquipment(
+		brand,
+		series || null,
+		name,
+		type || null,
+		createdBy,
+		brandId,
+		exerciseId,
+		secondaryExerciseId,
+		resistanceProfile,
+		resistanceCurve
+	);
 };
 
 const getGymsWithEquipment = async (slug) => {
@@ -57,6 +79,11 @@ const getBrands = async () => {
 const getSeriesByBrand = async (brand) => {
 	if (!brand) throw new Error('brand is required');
 	return await equipmentRepo.getSeriesByBrand(brand);
+};
+
+const checkDuplicate = async (brandId, series, name) => {
+	if (!brandId || !name) throw new Error('brandId and name are required');
+	return await equipmentRepo.checkDuplicate(brandId, series || null, name);
 };
 
 const uploadEquipmentImage = async (id, fileBuffer, mimeType, userId = null) => {
@@ -125,6 +152,7 @@ module.exports = {
 	searchEquipment,
 	getBrands,
 	getSeriesByBrand,
+	checkDuplicate,
 	uploadEquipmentImage,
 	rateEquipment,
 	favouriteEquipment,

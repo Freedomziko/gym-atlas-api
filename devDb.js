@@ -35,14 +35,31 @@ db.public.none(`
 		created_at timestamp DEFAULT now()
 	);
 
+	CREATE TABLE brands (
+		id serial PRIMARY KEY,
+		name text NOT NULL UNIQUE,
+		slug text NOT NULL UNIQUE,
+		logo_url text,
+		created_at timestamp DEFAULT now()
+	);
+
+	CREATE TABLE exercises (
+		id serial PRIMARY KEY,
+		name text NOT NULL,
+		category text NOT NULL DEFAULT 'machine'
+	);
+
 	CREATE TABLE equipment (
 		id serial PRIMARY KEY,
 		brand text NOT NULL,
+		brand_id integer REFERENCES brands(id),
 		name text NOT NULL,
 		slug text NOT NULL UNIQUE,
 		type text,
 		created_at timestamp DEFAULT now(),
 		series text,
+		exercise_id integer,
+		secondary_exercise_id integer,
 		image_url text,
 		status text NOT NULL DEFAULT 'approved',
 		created_by uuid,
@@ -165,6 +182,14 @@ const { Pool } = db.adapters.createPg();
 const pool = new Pool();
 const query = pool.query.bind(pool);
 const devUserId = process.env.DEV_AUTH_USER_ID || 'b2c3a47c-582a-4a6e-9015-eb9ff2e40e2f';
+const slugify = (value) =>
+	value
+		.toLowerCase()
+		.replace(/[\/\\]/g, '-')
+		.replace(/[^a-z0-9-]/g, '-')
+		.replace(/\s+/g, '-')
+		.replace(/-+/g, '-')
+		.replace(/^-|-$/g, '');
 const orderedEquipmentData = [...equipmentData].sort((a, b) => {
 	if (a.slug === 'matrix-aura-chest-press') return -1;
 	if (b.slug === 'matrix-aura-chest-press') return 1;
@@ -179,13 +204,34 @@ const ready = (async () => {
 		[devUserId, process.env.DEV_AUTH_EMAIL || 'local-admin@gymatlas.local', process.env.DEV_AUTH_USERNAME || 'notty']
 	);
 
+	const brandIds = new Map();
+	for (const brand of [...new Set(orderedEquipmentData.map((item) => item.brand).filter(Boolean))]) {
+		const result = await query(
+			`INSERT INTO brands (name, slug)
+			 VALUES ($1, $2)
+			 ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+			 RETURNING id`,
+			[brand, slugify(brand)]
+		);
+		brandIds.set(brand, result.rows[0].id);
+	}
+
+	for (const name of [...new Set(orderedEquipmentData.map((item) => item.name).filter(Boolean))]) {
+		await query(
+			`INSERT INTO exercises (name, category)
+			 VALUES ($1, 'machine')`,
+			[name]
+		);
+	}
+
 	for (const item of orderedEquipmentData) {
 		await query(
-			`INSERT INTO equipment (brand, series, name, slug, type, image_url, status, resistance_profile)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, 'constant')
+			`INSERT INTO equipment (brand, brand_id, series, name, slug, type, image_url, status, resistance_profile)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'constant')
 			 ON CONFLICT (slug) DO NOTHING`,
 			[
 				item.brand,
+				brandIds.get(item.brand) || null,
 				item.series || null,
 				item.name,
 				item.slug,

@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const { authMiddleware, adminMiddleware, superAdminMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminMiddleware, superAdminMiddleware, invalidateProfileCache } = require('../middleware/auth');
 const { createNotification } = require('./notificationsRoutes');
 const equipmentController = require('../controllers/equipmentController');
 
@@ -512,6 +512,7 @@ router.post('/make-admin/:userId', superAdminMiddleware, async (req, res) => {
 			[req.params.userId]
 		);
 		if (!result.rows[0]) return res.status(404).json({ error: 'User not found or not a plain user' });
+		invalidateProfileCache(req.params.userId);
 		res.json({ data: result.rows[0] });
 	} catch (err) {
 		console.error('MAKE ADMIN ERROR:', err);
@@ -527,6 +528,7 @@ router.post('/promote-super/:userId', superAdminMiddleware, async (req, res) => 
 			[req.params.userId]
 		);
 		if (!result.rows[0]) return res.status(404).json({ error: 'User not found or not an admin' });
+		invalidateProfileCache(req.params.userId);
 		res.json({ data: result.rows[0] });
 	} catch (err) {
 		console.error('PROMOTE SUPER ERROR:', err);
@@ -567,6 +569,7 @@ router.post('/demote/:userId', superAdminMiddleware, async (req, res) => {
 			`UPDATE profiles SET role = $2 WHERE id = $1 RETURNING id, email, username, role`,
 			[userId, newRole]
 		);
+		invalidateProfileCache(userId);
 		res.json({ data: result.rows[0] });
 	} catch (err) {
 		console.error('DEMOTE ERROR:', err);

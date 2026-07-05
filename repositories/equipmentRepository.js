@@ -14,13 +14,39 @@ const createSlug = (brand, series, name) =>
 		.replace(/^-|-$/g, '');
 
 // CREATE new equipment (catalog)
-const createEquipment = async (brand, series, name, type, createdBy = null, resistanceProfile = 'constant', resistanceCurve = null) => {
+const createEquipment = async (
+	brand,
+	series,
+	name,
+	type,
+	createdBy = null,
+	brandId = null,
+	exerciseId = null,
+	secondaryExerciseId = null,
+	resistanceProfile = 'constant',
+	resistanceCurve = null
+) => {
 	const slug = createSlug(brand, series, name);
 
 	const result = await pool.query(
-		`INSERT INTO equipment (brand, series, name, type, slug, status, created_by, resistance_profile, resistance_curve)
-         VALUES ($1, $2, $3, $4, $5, 'pending', $6, $7, $8) RETURNING *`,
-		[brand, series, name, type, slug, createdBy, resistanceProfile, resistanceCurve ? JSON.stringify(resistanceCurve) : null]
+		`INSERT INTO equipment (
+			brand, brand_id, series, name, type, slug, status, created_by,
+			exercise_id, secondary_exercise_id, resistance_profile, resistance_curve
+		)
+         VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, $11) RETURNING *`,
+		[
+			brand,
+			brandId,
+			series,
+			name,
+			type,
+			slug,
+			createdBy,
+			exerciseId,
+			secondaryExerciseId,
+			resistanceProfile,
+			resistanceCurve ? JSON.stringify(resistanceCurve) : null
+		]
 	);
 	return result.rows[0];
 };
@@ -191,22 +217,41 @@ const searchEquipmentByName = async (query) => {
 
 const getBrands = async () => {
 	const result = await pool.query(
-		`SELECT DISTINCT brand FROM equipment
-		WHERE brand IS NOT NULL
+		`SELECT brand AS name, COUNT(*) AS equipment_count
+		FROM equipment
+		WHERE brand IS NOT NULL AND status = 'approved'
+		GROUP BY brand
 		ORDER BY brand ASC`
 	);
-	return result.rows.map((r) => r.brand);
+	return result.rows.map((r) => ({ name: r.name, equipment_count: parseInt(r.equipment_count, 10) }));
 };
 
 const getSeriesByBrand = async (brand) => {
 	const result = await pool.query(
-		`SELECT DISTINCT series FROM equipment
+		`SELECT series AS name, COUNT(*) AS equipment_count
+		FROM equipment
 		WHERE brand ILIKE $1
 		AND series IS NOT NULL
+		AND status = 'approved'
+		GROUP BY series
 		ORDER BY series ASC`,
 		[brand]
 	);
-	return result.rows.map((r) => r.series);
+	return result.rows.map((r) => ({ name: r.name, equipment_count: parseInt(r.equipment_count, 10) }));
+};
+
+const checkDuplicate = async (brandId, series, name) => {
+	const result = await pool.query(
+		`SELECT id, slug, name
+		FROM equipment
+		WHERE brand_id = $1
+		AND ($2::text IS NULL OR series ILIKE $2)
+		AND name ILIKE $3
+		AND status = 'approved'
+		LIMIT 1`,
+		[brandId, series || null, `%${name}%`]
+	);
+	return result.rows[0] || null;
 };
 
 // CLOUDINARY version — commented out, using Azure below
@@ -361,6 +406,7 @@ module.exports = {
 	createEquipment,
 	getBrands,
 	getSeriesByBrand,
+	checkDuplicate,
 	uploadEquipmentImage,
 	rateEquipment,
 	favouriteEquipment,

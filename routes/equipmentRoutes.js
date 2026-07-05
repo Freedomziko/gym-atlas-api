@@ -31,6 +31,7 @@ router.post('/', authMiddleware, equipmentController.createEquipment);
 router.get('/search', equipmentController.searchEquipment);
 router.get('/brands', equipmentController.getBrands);
 router.get('/series', equipmentController.getSeriesByBrand);
+router.get('/check-duplicate', equipmentController.checkDuplicate);
 router.get('/:slug/gyms', equipmentController.getGymsWithEquipment);
 
 // ── Interactions ──────────────────────────────────────────────────────────────

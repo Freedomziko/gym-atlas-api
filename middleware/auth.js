@@ -1,39 +1,49 @@
-const supabase = require('../config/supabase');
 const pool = require('../db');
+const supabase = require('../config/supabase');
 
-const upsertProfile = (user) => {
-	const username =
-		user.user_metadata?.username ||
-		user.email?.split('@')[0] ||
-		`user_${user.id.slice(0, 8)}`;
-	return pool.query(
-		'INSERT INTO profiles (id, email, username) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING',
-		[user.id, user.email, username]
+const PROFILE_CACHE_TTL_MS = 60_000;
+const profileCache = new Map();
+
+const invalidateProfileCache = (userId) => profileCache.delete(userId);
+
+const getProfile = async (userId) => {
+	const cached = profileCache.get(userId);
+	if (cached && cached.expiresAt > Date.now()) return cached;
+
+	const { rows } = await pool.query(
+		'SELECT username, role FROM profiles WHERE id = $1',
+		[userId]
 	);
+	const entry = {
+		username: rows[0]?.username ?? '',
+		role: rows[0]?.role ?? 'user',
+		expiresAt: Date.now() + PROFILE_CACHE_TTL_MS
+	};
+	profileCache.set(userId, entry);
+	return entry;
+};
+
+const verifyToken = async (token) => {
+	const { data, error } = await supabase.auth.getUser(token);
+	if (error || !data?.user) throw new Error('Invalid token');
+	return data.user;
 };
 
 const getDevUser = () => {
 	if (!process.env.DEV_AUTH_USER_ID || process.env.NODE_ENV === 'production') return null;
 	return {
 		id: process.env.DEV_AUTH_USER_ID,
-		email: process.env.DEV_AUTH_EMAIL || 'local-admin@gymatlas.local',
-		user_metadata: { username: process.env.DEV_AUTH_USERNAME || 'notty' }
+		email: process.env.DEV_AUTH_EMAIL || 'local-admin@gymatlas.local'
 	};
 };
 
 const attachUser = async (req, user) => {
-	await upsertProfile(user);
-
-	const { rows } = await pool.query(
-		'SELECT username, role FROM profiles WHERE id = $1',
-		[user.id]
-	);
-
+	const profile = await getProfile(user.id);
 	req.user = {
 		id: user.id,
 		email: user.email,
-		username: rows[0]?.username ?? '',
-		role: rows[0]?.role ?? 'user'
+		username: profile.username,
+		role: profile.role
 	};
 };
 
@@ -48,11 +58,14 @@ const authMiddleware = async (req, res, next) => {
 	}
 
 	const token = authHeader.split(' ')[1];
-	const { data: { user }, error } = await supabase.auth.getUser(token);
-	if (error || !user) return res.status(401).json({ error: 'Invalid token' });
+	let supabaseUser;
+	try {
+		supabaseUser = await verifyToken(token);
+	} catch {
+		return res.status(401).json({ error: 'Invalid token' });
+	}
 
-	await attachUser(req, user);
-
+	await attachUser(req, supabaseUser);
 	next();
 };
 
@@ -67,12 +80,14 @@ const optionalAuth = async (req, res, next) => {
 	}
 
 	const token = authHeader.split(' ')[1];
-	const { data: { user }, error } = await supabase.auth.getUser(token);
-
-	if (!error && user) {
-		await attachUser(req, user);
+	let supabaseUser;
+	try {
+		supabaseUser = await verifyToken(token);
+	} catch {
+		return next();
 	}
 
+	await attachUser(req, supabaseUser);
 	next();
 };
 
@@ -92,4 +107,4 @@ const superAdminMiddleware = (req, res, next) => {
 	next();
 };
 
-module.exports = { authMiddleware, optionalAuth, adminMiddleware, superAdminMiddleware };
+module.exports = { authMiddleware, optionalAuth, adminMiddleware, superAdminMiddleware, invalidateProfileCache };

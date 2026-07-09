@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const { authMiddleware: auth, optionalAuth } = require('../middleware/auth');
+const { authMiddleware: auth, optionalAuth, invalidateProfileCache } = require('../middleware/auth');
+
+const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,20}$/;
 
 router.get('/:id/stats', auth, async (req, res) => {
 	const userId = req.params.id;
@@ -98,6 +100,34 @@ router.post('/sync', auth, async (req, res) => {
 		res.json({ data: result.rows[0] });
 	} catch (err) {
 		res.status(500).json({ error: 'Failed to sync user' });
+	}
+});
+
+// PATCH /users/me/username -- a user may only rename their own profile.
+router.patch('/me/username', auth, async (req, res) => {
+	const username = typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+	if (!USERNAME_PATTERN.test(username)) {
+		return res.status(400).json({ error: 'Username must be 3-20 letters, numbers, or underscores' });
+	}
+
+	try {
+		const result = await pool.query(
+			`UPDATE profiles
+			 SET username = $1
+			 WHERE id = $2
+			 RETURNING id, username, email, role, created_at`,
+			[username, req.user.id]
+		);
+		if (!result.rows[0]) return res.status(404).json({ error: 'User not found' });
+
+		invalidateProfileCache(req.user.id);
+		res.json({ data: result.rows[0] });
+	} catch (err) {
+		if (err.code === '23505') {
+			return res.status(409).json({ error: 'Username already taken' });
+		}
+		console.error('UPDATE USERNAME ERROR:', err);
+		res.status(500).json({ error: 'Failed to update username' });
 	}
 });
 

@@ -1,6 +1,5 @@
 const pool = require('../db');
-// const cloudinary = require('../config/cloudinary'); // CLOUDINARY — commented out, using Azure
-const { uploadToAzure } = require('../config/azureStorage');
+const { uploadToCloudinary } = require('../config/cloudinary');
 
 // CREATE new equipment (catalog)
 const createEquipment = async (
@@ -180,27 +179,10 @@ const checkDuplicate = async (brandId, series, name) => {
 	return result.rows[0] || null;
 };
 
-// CLOUDINARY version — commented out, using Azure below
-// const uploadEquipmentImage = async (id, fileBuffer, userId = null) => {
-// 	const result = await new Promise((resolve, reject) => {
-// 		cloudinary.uploader
-// 			.upload_stream({ folder: 'gym-atlas/equipment', resource_type: 'image' }, (error, result) => {
-// 				if (error) reject(error);
-// 				else resolve(result);
-// 			})
-// 			.end(fileBuffer);
-// 	});
-// 	await pool.query(
-// 		'UPDATE equipment SET image_url = $1, photo_uploaded_by = $2, photo_uploaded_at = NOW(), photo_status = \'pending\' WHERE id = $3',
-// 		[result.secure_url, userId, id]
-// 	);
-// 	return result.secure_url;
-// };
-
 // First photo (image_url IS NULL) goes live instantly; a replacement is staged in
 // pending_image_url and left for admin approval so the live image is never clobbered.
 const uploadEquipmentImage = async (id, fileBuffer, mimeType, userId = null) => {
-	const url = await uploadToAzure(fileBuffer, mimeType, 'equipment');
+	const url = await uploadToCloudinary(fileBuffer, mimeType, 'equipment');
 	const result = await pool.query(
 		`UPDATE equipment SET
 			image_url         = CASE WHEN image_url IS NULL THEN $1 ELSE image_url END,

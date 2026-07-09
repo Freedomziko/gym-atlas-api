@@ -7,8 +7,7 @@ const { createNotification } = require('./notificationsRoutes');
 const gymRepo = require('../repositories/gymRepository');
 const pool = require('../db');
 const multer = require('multer');
-// const cloudinary = require('../config/cloudinary'); // CLOUDINARY — commented out, using Azure
-const { uploadToAzure } = require('../config/azureStorage');
+const { uploadToCloudinary } = require('../config/cloudinary');
 const upload = multer({
 	storage: multer.memoryStorage(),
 	limits: { fileSize: 5 * 1024 * 1024 },
@@ -36,7 +35,7 @@ router.post('/:id/image', authMiddleware, upload.single('image'), async (req, re
 	try {
 		if (!req.file) return res.status(400).json({ error: 'No image provided' });
 
-		const url = await uploadToAzure(req.file.buffer, req.file.mimetype, 'gyms');
+		const url = await uploadToCloudinary(req.file.buffer, req.file.mimetype, 'gyms');
 		// First photo goes live instantly; a replacement is staged as pending until an admin approves.
 		const result = await gymRepo.uploadGymImage(req.params.id, url, req.user?.id || null);
 		if (!result) return res.status(404).json({ error: 'Gym not found' });

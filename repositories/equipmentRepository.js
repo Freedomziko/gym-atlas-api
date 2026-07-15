@@ -37,6 +37,8 @@ const getEquipmentById = async (id, userId = null) => {
 			COALESCE(ROUND(AVG(er.rating), 1), 0) AS avg_rating,
 			MAX(CASE WHEN er.user_id = $2 THEN er.rating END) AS user_rating,
 			COALESCE(BOOL_OR(ef.user_id = $2), false) AS is_favorite,
+			CASE WHEN ex1.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', ex1.id, 'name', ex1.name) END AS exercise,
+			CASE WHEN ex2.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', ex2.id, 'name', ex2.name) END AS secondary_exercise,
 			COALESCE((
 				SELECT JSON_AGG(
 					JSON_BUILD_OBJECT(
@@ -52,8 +54,10 @@ const getEquipmentById = async (id, userId = null) => {
 		FROM equipment e
 		LEFT JOIN equipment_ratings er ON er.equipment_id = e.id
 		LEFT JOIN equipment_favourites ef ON ef.equipment_id = e.id
+		LEFT JOIN exercises ex1 ON ex1.id = e.exercise_id
+		LEFT JOIN exercises ex2 ON ex2.id = e.secondary_exercise_id
 		WHERE e.id = $1
-		GROUP BY e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status
+		GROUP BY e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status, ex1.id, ex1.name, ex2.id, ex2.name
 		`,
 		[id, userId]
 	);
@@ -68,6 +72,8 @@ const getAllEquipment = async (userId = null) => {
 			COALESCE(ROUND(AVG(er.rating), 1), 0) AS avg_rating,
 			MAX(CASE WHEN er.user_id = $1 THEN er.rating END) AS user_rating,
 			COALESCE(BOOL_OR(ef.user_id = $1), false) AS is_favorite,
+			CASE WHEN ex1.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', ex1.id, 'name', ex1.name) END AS exercise,
+			CASE WHEN ex2.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', ex2.id, 'name', ex2.name) END AS secondary_exercise,
 			COALESCE((
 				SELECT JSON_AGG(
 					JSON_BUILD_OBJECT(
@@ -83,8 +89,10 @@ const getAllEquipment = async (userId = null) => {
 		FROM equipment e
 		LEFT JOIN equipment_ratings er ON er.equipment_id = e.id
 		LEFT JOIN equipment_favourites ef ON ef.equipment_id = e.id
+		LEFT JOIN exercises ex1 ON ex1.id = e.exercise_id
+		LEFT JOIN exercises ex2 ON ex2.id = e.secondary_exercise_id
 		WHERE e.status = 'approved'
-		GROUP BY e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status
+		GROUP BY e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status, ex1.id, ex1.name, ex2.id, ex2.name
 		ORDER BY e.brand, e.name
 		`,
 		[userId]

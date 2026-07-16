@@ -94,6 +94,11 @@ const searchGymsByMachines = async (filters) => {
 	return await gymRepo.searchGymsByMachines(filters);
 };
 
+const searchGymsByBrand = async (brandId) => {
+	if (!brandId) return await gymRepo.getGyms();
+	return await gymRepo.searchGymsByBrand(brandId);
+};
+
 const getEquipmentById = async (id) => {
 	return await gymRepo.getEquipmentById(id);
 };
@@ -112,5 +117,6 @@ module.exports = {
 	removeFavouriteGym,
 	getFavouriteGyms,
 	searchGymsByMachines,
+	searchGymsByBrand,
 	getEquipmentById
 };

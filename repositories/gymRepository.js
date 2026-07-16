@@ -361,6 +361,34 @@ const searchGymsByMachines = async (filters) => {
 	return result.rows;
 };
 
+// Broad "has ANY equipment from this brand" match — unlike searchGymsByMachines
+// there's no HAVING COUNT requirement, since one brand can match many machines per gym.
+const searchGymsByBrand = async (brandId) => {
+	const result = await pool.query(
+		`
+		SELECT
+			g.id,
+			g.name,
+			g.latitude AS lat,
+			g.longitude AS lng,
+			COALESCE(SUM(ge.quantity), 0)::INT AS total_equipment,
+			COUNT(DISTINCT ge.equipment_id)::INT AS unique_machines,
+			COALESCE(ROUND(AVG(gr.rating), 1), 0)::FLOAT AS rating,
+			COUNT(DISTINCT gf.user_id)::INT AS favourites
+		FROM gyms g
+		JOIN gym_equipment ge ON ge.gym_id = g.id
+		JOIN equipment e ON e.id = ge.equipment_id
+		LEFT JOIN gym_ratings gr ON gr.gym_id = g.id
+		LEFT JOIN gym_favourites gf ON gf.gym_id = g.id
+		WHERE e.brand_id = $1
+		AND g.status = 'approved'
+		GROUP BY g.id
+		`,
+		[brandId]
+	);
+	return result.rows;
+};
+
 const getFavouriteGyms = async (userId) => {
 	const result = await pool.query(
 		`
@@ -392,5 +420,6 @@ module.exports = {
 	favouriteGym,
 	removeFavouriteGym,
 	searchGymsByMachines,
+	searchGymsByBrand,
 	getFavouriteGyms
 };

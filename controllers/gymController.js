@@ -218,9 +218,11 @@ const removeFavouriteGym = async (req, res) => {
 };
 const searchGyms = async (req, res) => {
 	try {
-		const { machines } = req.body;
+		const { machines, brand_id } = req.body;
 
-		const gyms = await gymService.searchGymsByMachines(machines);
+		const gyms = brand_id
+			? await gymService.searchGymsByBrand(brand_id)
+			: await gymService.searchGymsByMachines(machines);
 
 		res.json({ data: gyms });
 	} catch (err) {

@@ -234,6 +234,53 @@ const addGymEquipment = async (
 	return result.rows[0];
 };
 
+// GET /gyms/ticker — small random sample of approved gyms + gym equipment,
+// mixed together for the landing-page coordinate ticker. No pagination needed.
+const getTickerSample = async () => {
+	const gymsResult = await pool.query(
+		`
+		SELECT name, latitude AS lat, longitude AS lng
+		FROM gyms
+		WHERE status = 'approved'
+		  AND latitude IS NOT NULL
+		  AND longitude IS NOT NULL
+		ORDER BY RANDOM()
+		LIMIT 7
+		`
+	);
+
+	const equipmentResult = await pool.query(
+		`
+		SELECT
+			CONCAT_WS(' ', e.brand, e.series, e.name) AS name,
+			g.latitude AS lat,
+			g.longitude AS lng
+		FROM gym_equipment ge
+		JOIN gyms g ON g.id = ge.gym_id
+		JOIN equipment e ON e.id = ge.equipment_id
+		WHERE ge.status = 'approved'
+		  AND g.status = 'approved'
+		  AND e.status = 'approved'
+		  AND g.latitude IS NOT NULL
+		  AND g.longitude IS NOT NULL
+		ORDER BY RANDOM()
+		LIMIT 7
+		`
+	);
+
+	const entries = [
+		...gymsResult.rows.map((r) => ({ type: 'gym', name: r.name, lat: r.lat, lng: r.lng })),
+		...equipmentResult.rows.map((r) => ({ type: 'equipment', name: r.name, lat: r.lat, lng: r.lng }))
+	];
+
+	for (let i = entries.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[entries[i], entries[j]] = [entries[j], entries[i]];
+	}
+
+	return entries;
+};
+
 const getGymStats = async () => {
 	const result = await pool.query(
 		`
@@ -413,6 +460,7 @@ module.exports = {
 	getGymEquipment,
 	addGymEquipment,
 	getGymStats,
+	getTickerSample,
 	decrementGymEquipment,
 	deleteGymEquipment,
 	getEquipmentById,

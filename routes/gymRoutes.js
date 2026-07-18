@@ -22,6 +22,7 @@ const upload = multer({
 
 router.get('/', optionalAuth, gymController.getGyms);
 router.get('/stats', gymController.getGymStats);
+router.get('/ticker', gymController.getGymTicker);
 router.get('/favourites', auth, gymController.getFavouriteGyms);
 router.get('/:id/equipment', gymController.getGymEquipment);
 

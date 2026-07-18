@@ -59,6 +59,10 @@ const getGymStats = async () => {
 	return await gymRepo.getGymStats();
 };
 
+const getTickerSample = async () => {
+	return await gymRepo.getTickerSample();
+};
+
 // Decrement quantity if > 1, otherwise delete the row entirely
 const removeGymEquipment = async (gymId, equipmentId) => {
 	const dec = await gymRepo.decrementGymEquipment(gymId, equipmentId);
@@ -111,6 +115,7 @@ module.exports = {
 	updateInstagram,
 	addGymEquipment,
 	getGymStats,
+	getTickerSample,
 	removeGymEquipment,
 	rateGym,
 	favouriteGym,

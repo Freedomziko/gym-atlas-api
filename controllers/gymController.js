@@ -117,6 +117,17 @@ const getGymStats = async (req, res) => {
 	}
 };
 
+// GET /gyms/ticker
+const getGymTicker = async (req, res) => {
+	try {
+		const entries = await gymService.getTickerSample();
+		res.json({ data: entries });
+	} catch (err) {
+		console.error('getGymTicker error:', err);
+		res.status(500).json({ error: 'Failed to fetch ticker sample' });
+	}
+};
+
 // DELETE /gyms/:gymId/equipment/:equipmentId
 const removeGymEquipment = async (req, res) => {
 	try {
@@ -237,6 +248,7 @@ module.exports = {
 	getGymEquipment,
 	addGymEquipment,
 	getGymStats,
+	getGymTicker,
 	removeGymEquipment,
 	createGym,
 	updateInstagram,

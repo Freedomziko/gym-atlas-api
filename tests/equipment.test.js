@@ -14,6 +14,41 @@ describe('GET /equipment', () => {
 	});
 });
 
+describe('GET /equipment exercise/category fields', () => {
+	it('includes exercise and secondary_exercise on each equipment row, with category info when linked', async () => {
+		const res = await request(app).get('/equipment');
+		expect(res.statusCode).toBe(200);
+		const equipment = res.body.data;
+		expect(Array.isArray(equipment)).toBe(true);
+		expect(equipment.length).toBeGreaterThan(0);
+		for (const item of equipment) {
+			expect(item).toHaveProperty('exercise');
+			expect(item).toHaveProperty('secondary_exercise');
+			if (item.exercise) {
+				expect(item.exercise).toHaveProperty('id');
+				expect(item.exercise).toHaveProperty('name');
+				expect(item.exercise).toHaveProperty('category_id');
+				expect(item.exercise).toHaveProperty('category_name');
+			}
+		}
+		const linked = equipment.find((e) => e.exercise);
+		expect(linked).toBeDefined();
+	});
+
+	it('GET /equipment/:id includes the linked exercise and its category', async () => {
+		// "243 Leg Press 45°" — seeded with exercise_id pointing at "Leg Press (Machine)"
+		const res = await request(app).get('/equipment/212');
+		expect(res.statusCode).toBe(200);
+		const equipment = res.body.data;
+		expect(equipment.exercise).toMatchObject({
+			id: '6c56fdfc-5193-4ddf-b5cb-3bfeb61db8d1',
+			name: 'Leg Press (Machine)'
+		});
+		expect(equipment.exercise).toHaveProperty('category_id');
+		expect(equipment.exercise).toHaveProperty('category_name');
+	});
+});
+
 describe('GET /equipment/search', () => {
 	it('returns 200 and an array for a valid query', async () => {
 		const res = await request(app).get('/equipment/search?query=press');

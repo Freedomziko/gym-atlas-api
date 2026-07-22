@@ -336,11 +336,6 @@ const deleteGymEquipment = async (gymId, equipmentId) => {
 	return result.rows[0] || null;
 };
 
-const getEquipmentById = async (id) => {
-	const result = await pool.query(`SELECT * FROM equipment WHERE id = $1`, [id]);
-	return result.rows[0] || null;
-};
-
 const rateGym = async (userId, gymId, rating) => {
 	const result = await pool.query(
 		`
@@ -463,7 +458,6 @@ module.exports = {
 	getTickerSample,
 	decrementGymEquipment,
 	deleteGymEquipment,
-	getEquipmentById,
 	rateGym,
 	favouriteGym,
 	removeFavouriteGym,

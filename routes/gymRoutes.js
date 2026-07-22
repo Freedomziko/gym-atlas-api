@@ -1,8 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const gymController = require('../controllers/gymController');
-const { authMiddleware: auth, authMiddleware, adminMiddleware } = require('../middleware/auth');
-const { optionalAuth } = require('../middleware/auth');
+const { authMiddleware: auth, authMiddleware, adminMiddleware, optionalAuth } = require('../middleware/auth');
 const { createNotification } = require('./notificationsRoutes');
 const gymRepo = require('../repositories/gymRepository');
 const pool = require('../db');

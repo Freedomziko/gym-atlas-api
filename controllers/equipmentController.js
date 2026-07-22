@@ -73,7 +73,7 @@ const getGymsWithEquipment = async (req, res) => {
 
 const searchEquipment = async (req, res) => {
 	try {
-		const results = await equipmentService.searchEquipment(req.query.query);
+		const results = await equipmentService.searchEquipment(req.query.q);
 		res.json({ data: results });
 	} catch (err) {
 		console.error('SEARCH EQUIPMENT ERROR:', err);

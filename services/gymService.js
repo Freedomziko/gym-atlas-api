@@ -103,10 +103,6 @@ const searchGymsByBrand = async (brandId) => {
 	return await gymRepo.searchGymsByBrand(brandId);
 };
 
-const getEquipmentById = async (id) => {
-	return await gymRepo.getEquipmentById(id);
-};
-
 module.exports = {
 	getGyms,
 	getGymById,
@@ -122,6 +118,5 @@ module.exports = {
 	removeFavouriteGym,
 	getFavouriteGyms,
 	searchGymsByMachines,
-	searchGymsByBrand,
-	getEquipmentById
+	searchGymsByBrand
 };

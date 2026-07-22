@@ -37,6 +37,11 @@ const getGymEquipment = async (gymId) => {
 	return await gymRepo.getGymEquipment(gymId);
 };
 
+const uploadGymImage = async (id, fileBuffer, mimeType, userId = null) => {
+	if (!fileBuffer) throw new Error('No image provided');
+	return await gymRepo.uploadGymImage(id, fileBuffer, mimeType, userId);
+};
+
 // Normalises a submitted Instagram handle (strips a leading @ and any URL
 // wrapping) before staging it for review.
 const updateInstagram = async (id, instagram, submittedBy = null) => {
@@ -109,6 +114,7 @@ module.exports = {
 	createGym,
 	getGymEquipment,
 	updateInstagram,
+	uploadGymImage,
 	addGymEquipment,
 	getGymStats,
 	getTickerSample,

@@ -1,6 +1,5 @@
 const equipmentService = require('../services/equipmentService');
-const pool = require('../db');
-const { createNotification } = require('../routes/notificationsRoutes');
+const { createNotification } = require('../services/notificationService');
 
 const getAllEquipment = async (req, res) => {
 	try {
@@ -43,7 +42,7 @@ const createEquipment = async (req, res) => {
 		);
 		if (createdBy) {
 			try {
-				await createNotification(pool, createdBy, 'submission_received', equipment.id, 'Your equipment submission is under review');
+				await createNotification(createdBy, 'submission_received', equipment.id, 'Your equipment submission is under review');
 			} catch (notifyErr) {
 				console.error('EQUIPMENT NOTIFICATION ERROR:', notifyErr);
 			}
@@ -126,7 +125,7 @@ const uploadEquipmentImage = async (req, res) => {
 		// A replacement photo is staged as pending; only then notify the contributor it's under review.
 		if (result.status === 'pending' && userId) {
 			try {
-				await createNotification(pool, userId, 'submission_received', req.params.id, 'Your equipment photo update is under review');
+				await createNotification(userId, 'submission_received', req.params.id, 'Your equipment photo update is under review');
 			} catch (notifyErr) {
 				console.error('EQUIPMENT PHOTO NOTIFICATION ERROR:', notifyErr);
 			}
@@ -192,7 +191,7 @@ const updateWeightStack = async (req, res) => {
 		if (!result) return res.status(404).json({ error: 'Equipment not found or not pin loaded' });
 		if (submittedBy) {
 			try {
-				await createNotification(pool, submittedBy, 'submission_received', req.params.id, 'Your weight stack update is under review');
+				await createNotification(submittedBy, 'submission_received', req.params.id, 'Your weight stack update is under review');
 			} catch (notifyErr) {
 				console.error('WEIGHT STACK NOTIFICATION ERROR:', notifyErr);
 			}
@@ -227,7 +226,7 @@ const createVariant = async (req, res) => {
 		);
 		if (createdBy) {
 			try {
-				await createNotification(pool, createdBy, 'submission_received', req.params.id, 'Your variant submission is under review');
+				await createNotification(createdBy, 'submission_received', req.params.id, 'Your variant submission is under review');
 			} catch (notifyErr) {
 				console.error('VARIANT NOTIFICATION ERROR:', notifyErr);
 			}

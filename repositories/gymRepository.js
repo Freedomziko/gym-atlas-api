@@ -1,5 +1,6 @@
 const pool = require('../db');
 const { findPlaceId, fetchPlaceHours } = require('../services/placesService');
+const { uploadToCloudinary } = require('../config/cloudinary');
 
 const getGyms = async (userId = null) => {
 	const result = await pool.query(
@@ -156,7 +157,8 @@ const createGym = async (
 
 // First photo (image_url IS NULL) goes live instantly; a replacement is staged in
 // pending_image_url and left for admin approval so the live image is never clobbered.
-const uploadGymImage = async (id, url, userId = null) => {
+const uploadGymImage = async (id, fileBuffer, mimeType, userId = null) => {
+	const url = await uploadToCloudinary(fileBuffer, mimeType, 'gyms');
 	const result = await pool.query(
 		`UPDATE gyms SET
 			image_url         = CASE WHEN image_url IS NULL THEN $1 ELSE image_url END,

@@ -36,6 +36,9 @@ router.post('/reject/weight-stack/:id', adminController.rejectWeightStack);
 router.post('/approve/gym-instagram/:id', adminController.approveGymInstagram);
 router.post('/reject/gym-instagram/:id', adminController.rejectGymInstagram);
 
+// PATCH /admin/equipment/:id — edit a catalogue entry in place
+router.patch('/equipment/:id', adminController.updateEquipment);
+
 // Exercise mapping changes — super_admin only; admins may propose but not confirm
 router.post('/approve/exercise-change/:id', superAdminMiddleware, adminController.approveExerciseChange);
 router.post('/reject/exercise-change/:id', superAdminMiddleware, adminController.rejectExerciseChange);

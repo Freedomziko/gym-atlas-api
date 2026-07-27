@@ -1,6 +1,15 @@
 const pool = require('../db');
 const { uploadToCloudinary } = require('../config/cloudinary');
 
+const buildSlug = (brand, series, name) =>
+	`${brand}-${series || ''}-${name}`
+		.toLowerCase()
+		.replace(/[\/\\]/g, '-')
+		.replace(/[^a-z0-9-]/g, '-')
+		.replace(/\s+/g, '-')
+		.replace(/-+/g, '-')
+		.replace(/^-|-$/g, '');
+
 // CREATE new equipment (catalog)
 const createEquipment = async (
 	brand,
@@ -12,13 +21,7 @@ const createEquipment = async (
 	exerciseId = null,
 	secondaryExerciseId = null
 ) => {
-	const slug = `${brand}-${series || ''}-${name}`
-		.toLowerCase()
-		.replace(/[\/\\]/g, '-')
-		.replace(/[^a-z0-9-]/g, '-')
-		.replace(/\s+/g, '-')
-		.replace(/-+/g, '-')
-		.replace(/^-|-$/g, '');
+	const slug = buildSlug(brand, series, name);
 
 	const result = await pool.query(
 		`INSERT INTO equipment (brand, brand_id, series, name, type, slug, status, created_by, exercise_id, secondary_exercise_id)
@@ -274,6 +277,34 @@ const updateWeightStack = async (id, weightStack, submittedBy = null) => {
 	return result.rows[0] || null;
 };
 
+// Admin edit of the catalogue entry itself. The slug is rebuilt from the new
+// brand/series/name so it never drifts from what createEquipment would produce.
+const updateEquipment = async (id, { brand, series, name, type, resistanceProfile, resistanceCurve }) => {
+	const result = await pool.query(
+		`UPDATE equipment
+		 SET brand = $1,
+		     series = $2,
+		     name = $3,
+		     type = $4,
+		     slug = $5,
+		     resistance_profile = $6,
+		     resistance_curve = $7
+		 WHERE id = $8
+		 RETURNING *`,
+		[
+			brand,
+			series,
+			name,
+			type,
+			buildSlug(brand, series, name),
+			resistanceProfile,
+			resistanceCurve ? JSON.stringify(resistanceCurve) : null,
+			id
+		]
+	);
+	return result.rows[0] || null;
+};
+
 // Exercise-mapping edits from a plain admin are staged; the live mapping is
 // untouched until a super admin confirms. exercise_submitted_by is the pending flag.
 const stageExerciseMapping = async (id, exerciseId, secondaryExerciseId, submittedBy = null) => {
@@ -349,6 +380,7 @@ module.exports = {
 	removeFavouriteEquipment,
 	searchEquipmentByName,
 	updateWeightStack,
+	updateEquipment,
 	stageExerciseMapping,
 	applyExerciseMapping,
 	getVariantsByEquipmentId,

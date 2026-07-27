@@ -83,6 +83,20 @@ const updateWeightStack = async (id, weightStack, submittedBy = null) => {
 	return await equipmentRepo.updateWeightStack(id, weightStack, submittedBy);
 };
 
+const RESISTANCE_PROFILES = ['constant', 'ascending', 'descending', 'adjustable', 'custom'];
+
+const updateEquipment = async (id, fields) => {
+	const { brand, name, type, resistanceProfile } = fields;
+	if (!brand || !name) throw new Error('brand and name are required');
+	if (type && !['pin_loaded', 'plate_loaded'].includes(type)) {
+		throw new Error('Invalid type');
+	}
+	if (resistanceProfile && !RESISTANCE_PROFILES.includes(resistanceProfile)) {
+		throw new Error('Invalid resistance_profile');
+	}
+	return await equipmentRepo.updateEquipment(id, fields);
+};
+
 // Admins may retarget a machine's exercise mapping, but only a super admin's
 // edit lands live — everyone else's is staged for confirmation.
 const updateExerciseMapping = async (id, exerciseId, secondaryExerciseId, applyDirectly, submittedBy = null) => {
@@ -131,6 +145,7 @@ module.exports = {
 	favouriteEquipment,
 	removeFavouriteEquipment,
 	updateWeightStack,
+	updateEquipment,
 	updateExerciseMapping,
 	getVariants,
 	createVariant,

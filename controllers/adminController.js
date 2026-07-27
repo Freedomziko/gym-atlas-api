@@ -1,4 +1,5 @@
 const adminService = require('../services/adminService');
+const equipmentService = require('../services/equipmentService');
 const { createNotification } = require('../services/notificationService');
 
 const getUsers = async (req, res) => {
@@ -294,6 +295,32 @@ const rejectWeightStack = async (req, res) => {
 	}
 };
 
+const updateEquipment = async (req, res) => {
+	try {
+		const { brand, series, name, type, resistance_profile, resistance_curve } = req.body;
+		const equipment = await equipmentService.updateEquipment(req.params.id, {
+			brand,
+			series: series || null,
+			name,
+			type,
+			resistanceProfile: resistance_profile || null,
+			resistanceCurve: resistance_profile === 'custom' ? resistance_curve : null
+		});
+		if (!equipment) return res.status(404).json({ error: 'Equipment not found' });
+		res.json({ data: equipment });
+	} catch (err) {
+		if (/required|Invalid/.test(err.message)) {
+			return res.status(400).json({ error: err.message });
+		}
+		// slug is unique, so renaming onto another machine's identity collides
+		if (err.code === '23505') {
+			return res.status(409).json({ error: 'Another machine already has that brand, series and name' });
+		}
+		console.error('UPDATE EQUIPMENT ERROR:', err);
+		res.status(500).json({ error: 'Failed to update equipment' });
+	}
+};
+
 const approveExerciseChange = async (req, res) => {
 	try {
 		const equipment = await adminService.approveExerciseChange(req.params.id);
@@ -439,6 +466,7 @@ module.exports = {
 	rejectWeightStack,
 	approveGymInstagram,
 	rejectGymInstagram,
+	updateEquipment,
 	approveExerciseChange,
 	rejectExerciseChange,
 	makeAdmin,

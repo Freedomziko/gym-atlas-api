@@ -6,18 +6,38 @@ const getAllUsers = async () => {
 };
 
 const getPendingSubmissions = async () => {
-	const [gyms, equipment, suggestions, photos, gymPhotos, variants, weightStacks, gymInstagrams] =
-		await Promise.all([
-			adminRepo.getPendingGyms(),
-			adminRepo.getPendingEquipment(),
-			adminRepo.getPendingSuggestions(),
-			adminRepo.getPendingPhotos(),
-			adminRepo.getPendingGymPhotos(),
-			adminRepo.getPendingVariants(),
-			adminRepo.getPendingWeightStacks(),
-			adminRepo.getPendingGymInstagrams()
-		]);
-	return { gyms, equipment, suggestions, photos, gymPhotos, variants, weightStacks, gymInstagrams };
+	const [
+		gyms,
+		equipment,
+		suggestions,
+		photos,
+		gymPhotos,
+		variants,
+		weightStacks,
+		gymInstagrams,
+		exerciseChanges
+	] = await Promise.all([
+		adminRepo.getPendingGyms(),
+		adminRepo.getPendingEquipment(),
+		adminRepo.getPendingSuggestions(),
+		adminRepo.getPendingPhotos(),
+		adminRepo.getPendingGymPhotos(),
+		adminRepo.getPendingVariants(),
+		adminRepo.getPendingWeightStacks(),
+		adminRepo.getPendingGymInstagrams(),
+		adminRepo.getPendingExerciseChanges()
+	]);
+	return {
+		gyms,
+		equipment,
+		suggestions,
+		photos,
+		gymPhotos,
+		variants,
+		weightStacks,
+		gymInstagrams,
+		exerciseChanges
+	};
 };
 
 const approveGym = async (id) => {
@@ -104,6 +124,18 @@ const rejectWeightStack = async (id) => {
 	return equipment;
 };
 
+const approveExerciseChange = async (id) => {
+	const equipment = await adminRepo.approveExerciseChange(id);
+	if (!equipment) throw new Error('Pending exercise change not found');
+	return equipment;
+};
+
+const rejectExerciseChange = async (id) => {
+	const equipment = await adminRepo.rejectExerciseChange(id);
+	if (!equipment) throw new Error('Pending exercise change not found');
+	return equipment;
+};
+
 const approveGymInstagram = async (id) => {
 	const gym = await adminRepo.approveGymInstagram(id);
 	if (!gym) throw new Error('Pending Instagram not found');
@@ -178,6 +210,8 @@ module.exports = {
 	rejectWeightStack,
 	approveGymInstagram,
 	rejectGymInstagram,
+	approveExerciseChange,
+	rejectExerciseChange,
 	makeAdmin,
 	promoteSuper,
 	demote

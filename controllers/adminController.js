@@ -294,6 +294,46 @@ const rejectWeightStack = async (req, res) => {
 	}
 };
 
+const approveExerciseChange = async (req, res) => {
+	try {
+		const equipment = await adminService.approveExerciseChange(req.params.id);
+		if (equipment.exercise_submitted_by) {
+			try {
+				await createNotification(equipment.exercise_submitted_by, 'equipment_approved', equipment.id, 'Your exercise mapping change was approved');
+			} catch (notifyErr) {
+				console.error('APPROVE EXERCISE CHANGE NOTIFICATION ERROR:', notifyErr);
+			}
+		}
+		res.json({ data: equipment });
+	} catch (err) {
+		if (err.message === 'Pending exercise change not found') {
+			return res.status(404).json({ error: err.message });
+		}
+		console.error('APPROVE EXERCISE CHANGE ERROR:', err);
+		res.status(500).json({ error: 'Failed to approve exercise change' });
+	}
+};
+
+const rejectExerciseChange = async (req, res) => {
+	try {
+		const equipment = await adminService.rejectExerciseChange(req.params.id);
+		if (equipment.exercise_submitted_by) {
+			try {
+				await createNotification(equipment.exercise_submitted_by, 'equipment_rejected', equipment.id, 'Your exercise mapping change was rejected');
+			} catch (notifyErr) {
+				console.error('REJECT EXERCISE CHANGE NOTIFICATION ERROR:', notifyErr);
+			}
+		}
+		res.json({ data: equipment });
+	} catch (err) {
+		if (err.message === 'Pending exercise change not found') {
+			return res.status(404).json({ error: err.message });
+		}
+		console.error('REJECT EXERCISE CHANGE ERROR:', err);
+		res.status(500).json({ error: 'Failed to reject exercise change' });
+	}
+};
+
 const approveGymInstagram = async (req, res) => {
 	try {
 		const gym = await adminService.approveGymInstagram(req.params.id);
@@ -399,6 +439,8 @@ module.exports = {
 	rejectWeightStack,
 	approveGymInstagram,
 	rejectGymInstagram,
+	approveExerciseChange,
+	rejectExerciseChange,
 	makeAdmin,
 	promoteSuper,
 	demote

@@ -274,6 +274,37 @@ const updateWeightStack = async (id, weightStack, submittedBy = null) => {
 	return result.rows[0] || null;
 };
 
+// Exercise-mapping edits from a plain admin are staged; the live mapping is
+// untouched until a super admin confirms. exercise_submitted_by is the pending flag.
+const stageExerciseMapping = async (id, exerciseId, secondaryExerciseId, submittedBy = null) => {
+	const result = await pool.query(
+		`UPDATE equipment
+		 SET pending_exercise_id = $1,
+		     pending_secondary_exercise_id = $2,
+		     exercise_submitted_by = $3
+		 WHERE id = $4
+		 RETURNING id`,
+		[exerciseId, secondaryExerciseId, submittedBy, id]
+	);
+	return result.rows[0] || null;
+};
+
+// Super admins write straight through, discarding any proposal already queued.
+const applyExerciseMapping = async (id, exerciseId, secondaryExerciseId) => {
+	const result = await pool.query(
+		`UPDATE equipment
+		 SET exercise_id = $1,
+		     secondary_exercise_id = $2,
+		     pending_exercise_id = NULL,
+		     pending_secondary_exercise_id = NULL,
+		     exercise_submitted_by = NULL
+		 WHERE id = $3
+		 RETURNING id`,
+		[exerciseId, secondaryExerciseId, id]
+	);
+	return result.rows[0] || null;
+};
+
 const getVariantsByEquipmentId = async (equipmentId) => {
 	const result = await pool.query(
 		`SELECT id, label, variation_type, is_default
@@ -318,6 +349,8 @@ module.exports = {
 	removeFavouriteEquipment,
 	searchEquipmentByName,
 	updateWeightStack,
+	stageExerciseMapping,
+	applyExerciseMapping,
 	getVariantsByEquipmentId,
 	createVariant,
 	deleteVariant

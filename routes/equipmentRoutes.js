@@ -29,6 +29,15 @@ router.post('/:id/favourite', authMiddleware, equipmentController.favouriteEquip
 router.delete('/:id/favourite', authMiddleware, equipmentController.removeFavouriteEquipment);
 router.patch('/:id/weight-stack', authMiddleware, equipmentController.updateWeightStack);
 
+// Admins may retarget a machine's exercise mapping; only a super admin's edit
+// lands live, everyone else's is staged for confirmation (see adminRoutes).
+router.patch(
+	'/:id/exercise',
+	authMiddleware,
+	adminMiddleware,
+	equipmentController.updateExerciseMapping
+);
+
 // ── Variants ──────────────────────────────────────────────────────────────────
 router.get('/:id/variants', equipmentController.getVariants);
 router.post('/:id/variants', authMiddleware, equipmentController.createVariant);

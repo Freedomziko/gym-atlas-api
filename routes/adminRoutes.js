@@ -36,6 +36,10 @@ router.post('/reject/weight-stack/:id', adminController.rejectWeightStack);
 router.post('/approve/gym-instagram/:id', adminController.approveGymInstagram);
 router.post('/reject/gym-instagram/:id', adminController.rejectGymInstagram);
 
+// Exercise mapping changes — super_admin only; admins may propose but not confirm
+router.post('/approve/exercise-change/:id', superAdminMiddleware, adminController.approveExerciseChange);
+router.post('/reject/exercise-change/:id', superAdminMiddleware, adminController.rejectExerciseChange);
+
 // POST /admin/make-admin/:userId — super_admin only; promotes a user → admin
 router.post('/make-admin/:userId', superAdminMiddleware, adminController.makeAdmin);
 

@@ -203,6 +203,58 @@ const updateWeightStack = async (req, res) => {
 	}
 };
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// exercises.id is a uuid. Returns null for "no exercise", undefined for malformed.
+const parseExerciseId = (value) => {
+	if (value === null || value === undefined || value === '') return null;
+	return typeof value === 'string' && UUID_RE.test(value) ? value : undefined;
+};
+
+const updateExerciseMapping = async (req, res) => {
+	try {
+		const { exercise_id, secondary_exercise_id } = req.body;
+		const exerciseId = parseExerciseId(exercise_id);
+		const secondaryExerciseId = parseExerciseId(secondary_exercise_id);
+		if (exerciseId === undefined || secondaryExerciseId === undefined) {
+			return res.status(400).json({ error: 'Invalid exercise id' });
+		}
+
+		const isSuperAdmin = req.user?.role === 'super_admin';
+		const submittedBy = req.user?.id || null;
+
+		const result = await equipmentService.updateExerciseMapping(
+			req.params.id,
+			exerciseId,
+			secondaryExerciseId,
+			isSuperAdmin,
+			submittedBy
+		);
+		if (!result) return res.status(404).json({ error: 'Equipment not found' });
+
+		if (!isSuperAdmin && submittedBy) {
+			try {
+				await createNotification(
+					submittedBy,
+					'submission_received',
+					req.params.id,
+					'Your exercise mapping change is under review'
+				);
+			} catch (notifyErr) {
+				console.error('EXERCISE MAPPING NOTIFICATION ERROR:', notifyErr);
+			}
+		}
+
+		res.json({ data: { id: result.id, review: isSuperAdmin ? 'approved' : 'pending' } });
+	} catch (err) {
+		if (/must differ|without a primary/.test(err.message)) {
+			return res.status(400).json({ error: err.message });
+		}
+		console.error('UPDATE EXERCISE MAPPING ERROR:', err);
+		res.status(500).json({ error: 'Failed to update exercise mapping' });
+	}
+};
+
 const getVariants = async (req, res) => {
 	try {
 		const variants = await equipmentService.getVariants(req.params.id);
@@ -269,6 +321,7 @@ module.exports = {
 	favouriteEquipment,
 	removeFavouriteEquipment,
 	updateWeightStack,
+	updateExerciseMapping,
 	getVariants,
 	createVariant,
 	deleteVariant

@@ -83,6 +83,20 @@ const updateWeightStack = async (id, weightStack, submittedBy = null) => {
 	return await equipmentRepo.updateWeightStack(id, weightStack, submittedBy);
 };
 
+// Admins may retarget a machine's exercise mapping, but only a super admin's
+// edit lands live — everyone else's is staged for confirmation.
+const updateExerciseMapping = async (id, exerciseId, secondaryExerciseId, applyDirectly, submittedBy = null) => {
+	if (secondaryExerciseId !== null && exerciseId === null) {
+		throw new Error('Cannot set a secondary exercise without a primary');
+	}
+	if (exerciseId !== null && exerciseId === secondaryExerciseId) {
+		throw new Error('Primary and secondary exercise must differ');
+	}
+	return applyDirectly
+		? await equipmentRepo.applyExerciseMapping(id, exerciseId, secondaryExerciseId)
+		: await equipmentRepo.stageExerciseMapping(id, exerciseId, secondaryExerciseId, submittedBy);
+};
+
 const VARIATION_TYPES = ['grip', 'unilateral', 'incline'];
 
 const getVariants = async (equipmentId) => {
@@ -117,6 +131,7 @@ module.exports = {
 	favouriteEquipment,
 	removeFavouriteEquipment,
 	updateWeightStack,
+	updateExerciseMapping,
 	getVariants,
 	createVariant,
 	deleteVariant

@@ -85,6 +85,26 @@ const getPendingVariants = async () => {
 	return result.rows;
 };
 
+const getPendingExerciseChanges = async () => {
+	const result = await pool.query(
+		`SELECT e.id, e.brand, e.series, e.name, e.image_url,
+                cur.name AS current_exercise_name,
+                cur2.name AS current_secondary_exercise_name,
+                pend.name AS pending_exercise_name,
+                pend2.name AS pending_secondary_exercise_name,
+                u.username AS submitted_by
+         FROM equipment e
+         LEFT JOIN exercises cur ON cur.id = e.exercise_id
+         LEFT JOIN exercises cur2 ON cur2.id = e.secondary_exercise_id
+         LEFT JOIN exercises pend ON pend.id = e.pending_exercise_id
+         LEFT JOIN exercises pend2 ON pend2.id = e.pending_secondary_exercise_id
+         LEFT JOIN profiles u ON u.id = e.exercise_submitted_by
+         WHERE e.exercise_submitted_by IS NOT NULL
+         ORDER BY e.id DESC`
+	);
+	return result.rows;
+};
+
 const getPendingWeightStacks = async () => {
 	const result = await pool.query(
 		`SELECT e.id, e.brand, e.series, e.name, e.image_url,
@@ -217,6 +237,38 @@ const rejectVariant = async (id) => {
 	return result.rows[0] || null;
 };
 
+// Both clear exercise_submitted_by, so the self-join reads it back from the
+// pre-update row to notify whoever proposed the change.
+const approveExerciseChange = async (id) => {
+	const result = await pool.query(
+		`UPDATE equipment e
+         SET exercise_id = e.pending_exercise_id,
+             secondary_exercise_id = e.pending_secondary_exercise_id,
+             pending_exercise_id = NULL,
+             pending_secondary_exercise_id = NULL,
+             exercise_submitted_by = NULL
+         FROM equipment prev
+         WHERE e.id = prev.id AND e.id = $1 AND e.exercise_submitted_by IS NOT NULL
+         RETURNING e.id, prev.exercise_submitted_by`,
+		[id]
+	);
+	return result.rows[0] || null;
+};
+
+const rejectExerciseChange = async (id) => {
+	const result = await pool.query(
+		`UPDATE equipment e
+         SET pending_exercise_id = NULL,
+             pending_secondary_exercise_id = NULL,
+             exercise_submitted_by = NULL
+         FROM equipment prev
+         WHERE e.id = prev.id AND e.id = $1 AND e.exercise_submitted_by IS NOT NULL
+         RETURNING e.id, prev.exercise_submitted_by`,
+		[id]
+	);
+	return result.rows[0] || null;
+};
+
 const approveWeightStack = async (id) => {
 	const result = await pool.query(
 		`UPDATE equipment
@@ -300,6 +352,9 @@ module.exports = {
 	getPendingGymPhotos,
 	getPendingVariants,
 	getPendingWeightStacks,
+	getPendingExerciseChanges,
+	approveExerciseChange,
+	rejectExerciseChange,
 	getPendingGymInstagrams,
 	approveGym,
 	rejectGym,

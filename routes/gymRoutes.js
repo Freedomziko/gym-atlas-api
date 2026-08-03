@@ -15,6 +15,7 @@ router.post('/search', gymController.searchGyms);
 router.post('/:gymId/equipment', auth, gymController.addGymEquipment);
 router.post('/:id/rate', auth, gymController.rateGym);
 router.patch('/:id/instagram', authMiddleware, gymController.updateInstagram);
+router.patch('/:id/free-weights', authMiddleware, gymController.submitFreeWeights);
 router.post('/:id/favourite', auth, gymController.favouriteGym);
 router.post('/:id/image', authMiddleware, upload.single('image'), gymController.uploadGymImage);
 

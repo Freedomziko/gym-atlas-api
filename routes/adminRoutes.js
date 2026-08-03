@@ -36,6 +36,9 @@ router.post('/reject/weight-stack/:id', adminController.rejectWeightStack);
 router.post('/approve/gym-instagram/:id', adminController.approveGymInstagram);
 router.post('/reject/gym-instagram/:id', adminController.rejectGymInstagram);
 
+router.post('/approve/free-weights/:id', adminController.approveFreeWeights);
+router.post('/reject/free-weights/:id', adminController.rejectFreeWeights);
+
 // PATCH /admin/equipment/:id — edit a catalogue entry in place
 router.patch('/equipment/:id', adminController.updateEquipment);
 

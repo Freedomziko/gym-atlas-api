@@ -401,6 +401,46 @@ const rejectGymInstagram = async (req, res) => {
 	}
 };
 
+const approveFreeWeights = async (req, res) => {
+	try {
+		const freeWeights = await adminService.approveFreeWeights(req.params.id, req.user.id);
+		if (freeWeights.submitted_by) {
+			try {
+				await createNotification(freeWeights.submitted_by, 'gym_approved', freeWeights.gym_id, 'Your free weights update was approved');
+			} catch (notifyErr) {
+				console.error('APPROVE FREE WEIGHTS NOTIFICATION ERROR:', notifyErr);
+			}
+		}
+		res.json({ data: freeWeights });
+	} catch (err) {
+		if (err.message === 'Pending free weights update not found') {
+			return res.status(404).json({ error: err.message });
+		}
+		console.error('APPROVE FREE WEIGHTS ERROR:', err);
+		res.status(500).json({ error: 'Failed to approve free weights update' });
+	}
+};
+
+const rejectFreeWeights = async (req, res) => {
+	try {
+		const freeWeights = await adminService.rejectFreeWeights(req.params.id);
+		if (freeWeights.submitted_by) {
+			try {
+				await createNotification(freeWeights.submitted_by, 'gym_rejected', freeWeights.gym_id, 'Your free weights update was not approved');
+			} catch (notifyErr) {
+				console.error('REJECT FREE WEIGHTS NOTIFICATION ERROR:', notifyErr);
+			}
+		}
+		res.json({ data: freeWeights });
+	} catch (err) {
+		if (err.message === 'Pending free weights update not found') {
+			return res.status(404).json({ error: err.message });
+		}
+		console.error('REJECT FREE WEIGHTS ERROR:', err);
+		res.status(500).json({ error: 'Failed to reject free weights update' });
+	}
+};
+
 const makeAdmin = async (req, res) => {
 	try {
 		const user = await adminService.makeAdmin(req.params.userId);
@@ -466,6 +506,8 @@ module.exports = {
 	rejectWeightStack,
 	approveGymInstagram,
 	rejectGymInstagram,
+	approveFreeWeights,
+	rejectFreeWeights,
 	updateEquipment,
 	approveExerciseChange,
 	rejectExerciseChange,

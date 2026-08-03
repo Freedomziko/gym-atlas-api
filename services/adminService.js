@@ -15,7 +15,8 @@ const getPendingSubmissions = async () => {
 		variants,
 		weightStacks,
 		gymInstagrams,
-		exerciseChanges
+		exerciseChanges,
+		freeWeights
 	] = await Promise.all([
 		adminRepo.getPendingGyms(),
 		adminRepo.getPendingEquipment(),
@@ -25,7 +26,8 @@ const getPendingSubmissions = async () => {
 		adminRepo.getPendingVariants(),
 		adminRepo.getPendingWeightStacks(),
 		adminRepo.getPendingGymInstagrams(),
-		adminRepo.getPendingExerciseChanges()
+		adminRepo.getPendingExerciseChanges(),
+		adminRepo.getPendingFreeWeights()
 	]);
 	return {
 		gyms,
@@ -36,7 +38,8 @@ const getPendingSubmissions = async () => {
 		variants,
 		weightStacks,
 		gymInstagrams,
-		exerciseChanges
+		exerciseChanges,
+		freeWeights
 	};
 };
 
@@ -148,6 +151,18 @@ const rejectGymInstagram = async (id) => {
 	return gym;
 };
 
+const approveFreeWeights = async (id, approvedBy) => {
+	const freeWeights = await adminRepo.approveFreeWeights(id, approvedBy);
+	if (!freeWeights) throw new Error('Pending free weights update not found');
+	return freeWeights;
+};
+
+const rejectFreeWeights = async (id) => {
+	const freeWeights = await adminRepo.rejectFreeWeights(id);
+	if (!freeWeights) throw new Error('Pending free weights update not found');
+	return freeWeights;
+};
+
 const makeAdmin = async (userId) => {
 	const user = await adminRepo.promoteToAdmin(userId);
 	if (!user) throw new Error('User not found or not a plain user');
@@ -210,6 +225,8 @@ module.exports = {
 	rejectWeightStack,
 	approveGymInstagram,
 	rejectGymInstagram,
+	approveFreeWeights,
+	rejectFreeWeights,
 	approveExerciseChange,
 	rejectExerciseChange,
 	makeAdmin,

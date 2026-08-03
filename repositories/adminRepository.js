@@ -131,6 +131,23 @@ const getPendingGymInstagrams = async () => {
 	return result.rows;
 };
 
+const getPendingFreeWeights = async () => {
+	const result = await pool.query(
+		`SELECT f.*,
+				g.name AS gym_name,
+				g.city,
+				g.country,
+				g.image_url,
+				u.username AS submitted_by
+		 FROM gym_free_weight_suggestions f
+		 JOIN gyms g ON g.id = f.gym_id
+		 LEFT JOIN profiles u ON u.id = f.submitted_by
+		 WHERE f.status = 'pending'
+		 ORDER BY f.created_at DESC`
+	);
+	return result.rows;
+};
+
 const approveGym = async (id) => {
 	const result = await pool.query(
 		`UPDATE gyms SET status = 'approved' WHERE id = $1 RETURNING *`,
@@ -313,6 +330,87 @@ const rejectGymInstagram = async (id) => {
 	return result.rows[0] || null;
 };
 
+const approveFreeWeights = async (id, approvedBy) => {
+	const client = await pool.connect();
+	try {
+		await client.query('BEGIN');
+		const pendingResult = await client.query(
+			`UPDATE gym_free_weight_suggestions
+			 SET status = 'approved'
+			 WHERE id = $1 AND status = 'pending'
+			 RETURNING *`,
+			[id]
+		);
+		const pending = pendingResult.rows[0];
+		if (!pending) {
+			await client.query('ROLLBACK');
+			return null;
+		}
+
+		const approvedResult = await client.query(
+			`INSERT INTO gym_free_weights (
+				gym_id,
+				dumbbell_min_kg,
+				dumbbell_max_kg,
+				dumbbell_racks,
+				squat_racks,
+				flat_benches,
+				incline_benches,
+				platforms,
+				preacher_curl_stations,
+				verified,
+				updated_by
+			 )
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, $10)
+			 ON CONFLICT (gym_id)
+			 DO UPDATE SET
+				dumbbell_min_kg = EXCLUDED.dumbbell_min_kg,
+				dumbbell_max_kg = EXCLUDED.dumbbell_max_kg,
+				dumbbell_racks = EXCLUDED.dumbbell_racks,
+				squat_racks = EXCLUDED.squat_racks,
+				flat_benches = EXCLUDED.flat_benches,
+				incline_benches = EXCLUDED.incline_benches,
+				platforms = EXCLUDED.platforms,
+				preacher_curl_stations = EXCLUDED.preacher_curl_stations,
+				verified = true,
+				updated_by = EXCLUDED.updated_by,
+				updated_at = NOW()
+			 RETURNING *`,
+			[
+				pending.gym_id,
+				pending.dumbbell_min_kg,
+				pending.dumbbell_max_kg,
+				pending.dumbbell_racks,
+				pending.squat_racks,
+				pending.flat_benches,
+				pending.incline_benches,
+				pending.platforms,
+				pending.preacher_curl_stations,
+				approvedBy
+			]
+		);
+
+		await client.query('COMMIT');
+		return { ...approvedResult.rows[0], submitted_by: pending.submitted_by };
+	} catch (err) {
+		await client.query('ROLLBACK');
+		throw err;
+	} finally {
+		client.release();
+	}
+};
+
+const rejectFreeWeights = async (id) => {
+	const result = await pool.query(
+		`UPDATE gym_free_weight_suggestions
+		 SET status = 'rejected'
+		 WHERE id = $1 AND status = 'pending'
+		 RETURNING *`,
+		[id]
+	);
+	return result.rows[0] || null;
+};
+
 const promoteToAdmin = async (userId) => {
 	// Guard on role = 'user' so this can never silently downgrade a super_admin to admin.
 	const result = await pool.query(
@@ -356,6 +454,7 @@ module.exports = {
 	approveExerciseChange,
 	rejectExerciseChange,
 	getPendingGymInstagrams,
+	getPendingFreeWeights,
 	approveGym,
 	rejectGym,
 	approveSuggestion,
@@ -372,6 +471,8 @@ module.exports = {
 	rejectWeightStack,
 	approveGymInstagram,
 	rejectGymInstagram,
+	approveFreeWeights,
+	rejectFreeWeights,
 	promoteToAdmin,
 	promoteToSuperAdmin,
 	getUserRole,

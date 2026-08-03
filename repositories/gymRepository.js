@@ -448,6 +448,76 @@ const getFavouriteGyms = async (userId) => {
 	return result.rows;
 };
 
+const getFreeWeights = async (gymId) => {
+	const result = await pool.query(
+		`
+		SELECT
+			gym_id,
+			dumbbell_min_kg,
+			dumbbell_max_kg,
+			dumbbell_racks,
+			squat_racks,
+			flat_benches,
+			incline_benches,
+			platforms,
+			preacher_curl_stations,
+			verified,
+			updated_at
+		FROM gym_free_weights
+		WHERE gym_id = $1
+		`,
+		[gymId]
+	);
+	return result.rows[0] || null;
+};
+
+const submitFreeWeights = async (gymId, values, submittedBy = null) => {
+	const result = await pool.query(
+		`
+		INSERT INTO gym_free_weight_suggestions (
+			gym_id,
+			dumbbell_min_kg,
+			dumbbell_max_kg,
+			dumbbell_racks,
+			squat_racks,
+			flat_benches,
+			incline_benches,
+			platforms,
+			preacher_curl_stations,
+			submitted_by
+		)
+		SELECT g.id, $2, $3, $4, $5, $6, $7, $8, $9, $10
+		FROM gyms g
+		WHERE g.id = $1
+		ON CONFLICT (gym_id, submitted_by) WHERE status = 'pending'
+		DO UPDATE SET
+			dumbbell_min_kg = EXCLUDED.dumbbell_min_kg,
+			dumbbell_max_kg = EXCLUDED.dumbbell_max_kg,
+			dumbbell_racks = EXCLUDED.dumbbell_racks,
+			squat_racks = EXCLUDED.squat_racks,
+			flat_benches = EXCLUDED.flat_benches,
+			incline_benches = EXCLUDED.incline_benches,
+			platforms = EXCLUDED.platforms,
+			preacher_curl_stations = EXCLUDED.preacher_curl_stations,
+			created_at = NOW()
+		RETURNING *
+		`,
+		[
+			gymId,
+			values.dumbbell_min_kg,
+			values.dumbbell_max_kg,
+			values.dumbbell_racks,
+			values.squat_racks,
+			values.flat_benches,
+			values.incline_benches,
+			values.platforms,
+			values.preacher_curl_stations,
+			submittedBy
+		]
+	);
+	return result.rows[0];
+};
+
 module.exports = {
 	getGyms,
 	getGymById,
@@ -465,5 +535,7 @@ module.exports = {
 	removeFavouriteGym,
 	searchGymsByMachines,
 	searchGymsByBrand,
-	getFavouriteGyms
+	getFavouriteGyms,
+	getFreeWeights,
+	submitFreeWeights
 };

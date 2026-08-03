@@ -180,6 +180,28 @@ const uploadGymImage = async (req, res) => {
 		res.status(500).json({ error: 'Failed to upload image' });
 	}
 };
+
+const submitFreeWeights = async (req, res) => {
+	try {
+		const submittedBy = req.user.id;
+		const result = await gymService.submitFreeWeights(req.params.id, req.body, submittedBy);
+		try {
+			await createNotification(submittedBy, 'submission_received', req.params.id, 'Your free weights update is under review');
+		} catch (notifyErr) {
+			console.error('FREE WEIGHTS NOTIFICATION ERROR:', notifyErr);
+		}
+		res.status(201).json({ data: result });
+	} catch (err) {
+		if (err.message === 'Gym not found') {
+			return res.status(404).json({ error: err.message });
+		}
+		if (err.message?.includes('must be')) {
+			return res.status(400).json({ error: err.message });
+		}
+		console.error('SUBMIT FREE WEIGHTS ERROR:', err);
+		res.status(500).json({ error: 'Failed to submit free weights' });
+	}
+};
 const rateGym = async (req, res) => {
 	try {
 		const { id } = req.params;
@@ -281,6 +303,7 @@ module.exports = {
 	createGym,
 	updateInstagram,
 	uploadGymImage,
+	submitFreeWeights,
 	rateGym,
 	favouriteGym,
 	removeFavouriteGym,

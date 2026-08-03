@@ -5,9 +5,12 @@ const getGyms = async (userId = null) => {
 };
 
 const getGymById = async (id, userId = null) => {
-	const gym = await gymRepo.getGymById(id, userId);
+	const [gym, freeWeights] = await Promise.all([
+		gymRepo.getGymById(id, userId),
+		gymRepo.getFreeWeights(id)
+	]);
 	if (!gym) throw new Error('Gym not found');
-	return gym;
+	return { ...gym, free_weights: freeWeights };
 };
 
 const createGym = async (
@@ -54,6 +57,53 @@ const updateInstagram = async (id, instagram, submittedBy = null) => {
 	if (!handle) throw new Error('Instagram handle is required');
 	if (!/^[A-Za-z0-9._]{1,30}$/.test(handle)) throw new Error('Invalid Instagram handle');
 	return await gymRepo.updateInstagram(id, handle, submittedBy);
+};
+
+const toCount = (value, field) => {
+	const number = Number(value ?? 0);
+	if (!Number.isInteger(number) || number < 0 || number > 999) {
+		throw new Error(`${field} must be a whole number between 0 and 999`);
+	}
+	return number;
+};
+
+const toOptionalKg = (value, field) => {
+	if (value === null || value === undefined || value === '') return null;
+	const number = Number(value);
+	if (!Number.isInteger(number) || number < 0 || number > 999) {
+		throw new Error(`${field} must be a whole number between 0 and 999`);
+	}
+	return number;
+};
+
+const normaliseFreeWeights = (body = {}) => {
+	const values = {
+		dumbbell_min_kg: toOptionalKg(body.dumbbell_min_kg, 'dumbbell_min_kg'),
+		dumbbell_max_kg: toOptionalKg(body.dumbbell_max_kg, 'dumbbell_max_kg'),
+		dumbbell_racks: toCount(body.dumbbell_racks, 'dumbbell_racks'),
+		squat_racks: toCount(body.squat_racks, 'squat_racks'),
+		flat_benches: toCount(body.flat_benches, 'flat_benches'),
+		incline_benches: toCount(body.incline_benches, 'incline_benches'),
+		platforms: toCount(body.platforms, 'platforms'),
+		preacher_curl_stations: toCount(body.preacher_curl_stations, 'preacher_curl_stations')
+	};
+	if (
+		values.dumbbell_min_kg !== null &&
+		values.dumbbell_max_kg !== null &&
+		values.dumbbell_max_kg < values.dumbbell_min_kg
+	) {
+		throw new Error('dumbbell_max_kg must be greater than or equal to dumbbell_min_kg');
+	}
+	return values;
+};
+
+const submitFreeWeights = async (gymId, body, submittedBy = null) => {
+	const parsedGymId = Number(gymId);
+	if (!Number.isInteger(parsedGymId) || parsedGymId <= 0) throw new Error('Gym not found');
+	const values = normaliseFreeWeights(body);
+	const suggestion = await gymRepo.submitFreeWeights(parsedGymId, values, submittedBy);
+	if (!suggestion) throw new Error('Gym not found');
+	return suggestion;
 };
 
 const addGymEquipment = async (gymId, equipmentId, quantity, notes, status, createdBy) => {
@@ -115,6 +165,7 @@ module.exports = {
 	getGymEquipment,
 	updateInstagram,
 	uploadGymImage,
+	submitFreeWeights,
 	addGymEquipment,
 	getGymStats,
 	getTickerSample,

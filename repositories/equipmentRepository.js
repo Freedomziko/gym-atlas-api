@@ -1,10 +1,7 @@
 const pool = require('../db');
-// const cloudinary = require('../config/cloudinary'); // CLOUDINARY — commented out, using Azure
-const { uploadToAzure } = require('../config/azureStorage');
+const { uploadToCloudinary } = require('../config/cloudinary');
 
-const usesDevDb = () => process.env.USE_PG_MEM === 'true';
-
-const createSlug = (brand, series, name) =>
+const buildSlug = (brand, series, name) =>
 	`${brand}-${series || ''}-${name}`
 		.toLowerCase()
 		.replace(/[\/\\]/g, '-')
@@ -26,62 +23,19 @@ const createEquipment = async (
 	resistanceProfile = 'constant',
 	resistanceCurve = null
 ) => {
-	const slug = createSlug(brand, series, name);
+	const slug = buildSlug(brand, series, name);
 
 	const result = await pool.query(
-		`INSERT INTO equipment (
-			brand, brand_id, series, name, type, slug, status, created_by,
-			exercise_id, secondary_exercise_id, resistance_profile, resistance_curve
-		)
+		`INSERT INTO equipment (brand, brand_id, series, name, type, slug, status, created_by, exercise_id, secondary_exercise_id, resistance_profile, resistance_curve)
          VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, $8, $9, $10, $11) RETURNING *`,
-		[
-			brand,
-			brandId,
-			series,
-			name,
-			type,
-			slug,
-			createdBy,
-			exerciseId,
-			secondaryExerciseId,
-			resistanceProfile,
-			resistanceCurve ? JSON.stringify(resistanceCurve) : null
-		]
+		[brand, brandId, series, name, type, slug, createdBy, exerciseId, secondaryExerciseId,
+			resistanceProfile, resistanceCurve ? JSON.stringify(resistanceCurve) : null]
 	);
 	return result.rows[0];
 };
 
 // Keep open for admin preview (no status filter)
 const getEquipmentById = async (id, userId = null) => {
-	if (usesDevDb()) {
-		const result = await pool.query(
-			`
-			SELECT
-				e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status,
-				e.resistance_profile, e.resistance_curve,
-				COALESCE(ROUND(AVG(er.rating), 1), 0) AS avg_rating,
-				MAX(CASE WHEN er.user_id = $2 THEN er.rating END) AS user_rating,
-				COALESCE(BOOL_OR(ef.user_id = $2), false) AS is_favorite
-			FROM equipment e
-			LEFT JOIN equipment_ratings er ON er.equipment_id = e.id
-			LEFT JOIN equipment_favourites ef ON ef.equipment_id = e.id
-			WHERE e.id = $1
-			GROUP BY e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status, e.resistance_profile, e.resistance_curve
-			`,
-			[id, userId]
-		);
-		const row = result.rows[0] || null;
-		if (!row) return null;
-		const variants = await pool.query(
-			`SELECT id, label, variation_type, is_default
-			 FROM equipment_variants
-			 WHERE equipment_id = $1 AND status = 'approved'
-			 ORDER BY is_default DESC, label ASC`,
-			[id]
-		);
-		return { ...row, variants: variants.rows };
-	}
-
 	const result = await pool.query(
 		`
 		SELECT
@@ -90,6 +44,8 @@ const getEquipmentById = async (id, userId = null) => {
 			COALESCE(ROUND(AVG(er.rating), 1), 0) AS avg_rating,
 			MAX(CASE WHEN er.user_id = $2 THEN er.rating END) AS user_rating,
 			COALESCE(BOOL_OR(ef.user_id = $2), false) AS is_favorite,
+			CASE WHEN ex1.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', ex1.id, 'name', ex1.name, 'category_id', ec1.id, 'category_name', ec1.name) END AS exercise,
+			CASE WHEN ex2.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', ex2.id, 'name', ex2.name, 'category_id', ec2.id, 'category_name', ec2.name) END AS secondary_exercise,
 			COALESCE((
 				SELECT JSON_AGG(
 					JSON_BUILD_OBJECT(
@@ -105,8 +61,12 @@ const getEquipmentById = async (id, userId = null) => {
 		FROM equipment e
 		LEFT JOIN equipment_ratings er ON er.equipment_id = e.id
 		LEFT JOIN equipment_favourites ef ON ef.equipment_id = e.id
+		LEFT JOIN exercises ex1 ON ex1.id = e.exercise_id
+		LEFT JOIN exercises ex2 ON ex2.id = e.secondary_exercise_id
+		LEFT JOIN equipment_categories ec1 ON ec1.id = ex1.category_id
+		LEFT JOIN equipment_categories ec2 ON ec2.id = ex2.category_id
 		WHERE e.id = $1
-		GROUP BY e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status, e.resistance_profile, e.resistance_curve
+		GROUP BY e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status, ex1.id, ex1.name, ex2.id, ex2.name, ec1.id, ec1.name, ec2.id, ec2.name
 		`,
 		[id, userId]
 	);
@@ -114,27 +74,6 @@ const getEquipmentById = async (id, userId = null) => {
 };
 
 const getAllEquipment = async (userId = null) => {
-	if (usesDevDb()) {
-		const result = await pool.query(
-			`
-			SELECT
-				e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status,
-				e.resistance_profile, e.resistance_curve,
-				COALESCE(ROUND(AVG(er.rating), 1), 0) AS avg_rating,
-				MAX(CASE WHEN er.user_id = $1 THEN er.rating END) AS user_rating,
-				COALESCE(BOOL_OR(ef.user_id = $1), false) AS is_favorite
-			FROM equipment e
-			LEFT JOIN equipment_ratings er ON er.equipment_id = e.id
-			LEFT JOIN equipment_favourites ef ON ef.equipment_id = e.id
-			WHERE e.status = 'approved'
-			GROUP BY e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status, e.resistance_profile, e.resistance_curve
-			ORDER BY e.brand, e.name
-			`,
-			[userId]
-		);
-		return result.rows.map((row) => ({ ...row, variants: [] }));
-	}
-
 	const result = await pool.query(
 		`
 		SELECT
@@ -143,6 +82,8 @@ const getAllEquipment = async (userId = null) => {
 			COALESCE(ROUND(AVG(er.rating), 1), 0) AS avg_rating,
 			MAX(CASE WHEN er.user_id = $1 THEN er.rating END) AS user_rating,
 			COALESCE(BOOL_OR(ef.user_id = $1), false) AS is_favorite,
+			CASE WHEN ex1.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', ex1.id, 'name', ex1.name, 'category_id', ec1.id, 'category_name', ec1.name) END AS exercise,
+			CASE WHEN ex2.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', ex2.id, 'name', ex2.name, 'category_id', ec2.id, 'category_name', ec2.name) END AS secondary_exercise,
 			COALESCE((
 				SELECT JSON_AGG(
 					JSON_BUILD_OBJECT(
@@ -158,8 +99,12 @@ const getAllEquipment = async (userId = null) => {
 		FROM equipment e
 		LEFT JOIN equipment_ratings er ON er.equipment_id = e.id
 		LEFT JOIN equipment_favourites ef ON ef.equipment_id = e.id
+		LEFT JOIN exercises ex1 ON ex1.id = e.exercise_id
+		LEFT JOIN exercises ex2 ON ex2.id = e.secondary_exercise_id
+		LEFT JOIN equipment_categories ec1 ON ec1.id = ex1.category_id
+		LEFT JOIN equipment_categories ec2 ON ec2.id = ex2.category_id
 		WHERE e.status = 'approved'
-		GROUP BY e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status, e.resistance_profile, e.resistance_curve
+		GROUP BY e.id, e.brand, e.series, e.name, e.slug, e.type, e.weight_stack, e.created_at, e.image_url, e.status, ex1.id, ex1.name, ex2.id, ex2.name, ec1.id, ec1.name, ec2.id, ec2.name
 		ORDER BY e.brand, e.name
 		`,
 		[userId]
@@ -190,9 +135,21 @@ const getGymsByEquipmentSlug = async (slug) => {
 };
 
 const getEquipmentBySlug = async (slug) => {
-	const result = await pool.query(`SELECT id, name, brand, series FROM equipment WHERE slug = $1`, [
-		slug
-	]);
+	const result = await pool.query(
+		`
+		SELECT
+			e.id, e.name, e.brand, e.series,
+			CASE WHEN ex1.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', ex1.id, 'name', ex1.name, 'category_id', ec1.id, 'category_name', ec1.name) END AS exercise,
+			CASE WHEN ex2.id IS NOT NULL THEN JSON_BUILD_OBJECT('id', ex2.id, 'name', ex2.name, 'category_id', ec2.id, 'category_name', ec2.name) END AS secondary_exercise
+		FROM equipment e
+		LEFT JOIN exercises ex1 ON ex1.id = e.exercise_id
+		LEFT JOIN exercises ex2 ON ex2.id = e.secondary_exercise_id
+		LEFT JOIN equipment_categories ec1 ON ec1.id = ex1.category_id
+		LEFT JOIN equipment_categories ec2 ON ec2.id = ex2.category_id
+		WHERE e.slug = $1
+		`,
+		[slug]
+	);
 	return result.rows[0] || null;
 };
 
@@ -254,27 +211,10 @@ const checkDuplicate = async (brandId, series, name) => {
 	return result.rows[0] || null;
 };
 
-// CLOUDINARY version — commented out, using Azure below
-// const uploadEquipmentImage = async (id, fileBuffer, userId = null) => {
-// 	const result = await new Promise((resolve, reject) => {
-// 		cloudinary.uploader
-// 			.upload_stream({ folder: 'gym-atlas/equipment', resource_type: 'image' }, (error, result) => {
-// 				if (error) reject(error);
-// 				else resolve(result);
-// 			})
-// 			.end(fileBuffer);
-// 	});
-// 	await pool.query(
-// 		'UPDATE equipment SET image_url = $1, photo_uploaded_by = $2, photo_uploaded_at = NOW(), photo_status = \'pending\' WHERE id = $3',
-// 		[result.secure_url, userId, id]
-// 	);
-// 	return result.secure_url;
-// };
-
 // First photo (image_url IS NULL) goes live instantly; a replacement is staged in
 // pending_image_url and left for admin approval so the live image is never clobbered.
 const uploadEquipmentImage = async (id, fileBuffer, mimeType, userId = null) => {
-	const url = await uploadToAzure(fileBuffer, mimeType, 'equipment');
+	const url = await uploadToCloudinary(fileBuffer, mimeType, 'equipment');
 	const result = await pool.query(
 		`UPDATE equipment SET
 			image_url         = CASE WHEN image_url IS NULL THEN $1 ELSE image_url END,
@@ -342,29 +282,61 @@ const updateWeightStack = async (id, weightStack, submittedBy = null) => {
 	return result.rows[0] || null;
 };
 
-const updateEquipmentDetails = async (id, fields) => {
-	const slug = createSlug(fields.brand, fields.series, fields.name);
+// Admin edit of the catalogue entry itself. The slug is rebuilt from the new
+// brand/series/name so it never drifts from what createEquipment would produce.
+const updateEquipment = async (id, { brand, series, name, type, resistanceProfile, resistanceCurve }) => {
 	const result = await pool.query(
 		`UPDATE equipment
 		 SET brand = $1,
 		     series = $2,
 		     name = $3,
 		     type = $4,
-		     resistance_profile = $5,
-		     resistance_curve = $6,
-		     slug = $7
+		     slug = $5,
+		     resistance_profile = $6,
+		     resistance_curve = $7
 		 WHERE id = $8
 		 RETURNING *`,
 		[
-			fields.brand,
-			fields.series || null,
-			fields.name,
-			fields.type,
-			fields.resistance_profile,
-			fields.resistance_curve ? JSON.stringify(fields.resistance_curve) : null,
-			slug,
+			brand,
+			series,
+			name,
+			type,
+			buildSlug(brand, series, name),
+			resistanceProfile,
+			resistanceCurve ? JSON.stringify(resistanceCurve) : null,
 			id
 		]
+	);
+	return result.rows[0] || null;
+};
+
+// Exercise-mapping edits from a plain admin are staged; the live mapping is
+// untouched until a super admin confirms. exercise_submitted_by is the pending flag.
+const stageExerciseMapping = async (id, exerciseId, secondaryExerciseId, submittedBy = null) => {
+	const result = await pool.query(
+		`UPDATE equipment
+		 SET pending_exercise_id = $1,
+		     pending_secondary_exercise_id = $2,
+		     exercise_submitted_by = $3
+		 WHERE id = $4
+		 RETURNING id`,
+		[exerciseId, secondaryExerciseId, submittedBy, id]
+	);
+	return result.rows[0] || null;
+};
+
+// Super admins write straight through, discarding any proposal already queued.
+const applyExerciseMapping = async (id, exerciseId, secondaryExerciseId) => {
+	const result = await pool.query(
+		`UPDATE equipment
+		 SET exercise_id = $1,
+		     secondary_exercise_id = $2,
+		     pending_exercise_id = NULL,
+		     pending_secondary_exercise_id = NULL,
+		     exercise_submitted_by = NULL
+		 WHERE id = $3
+		 RETURNING id`,
+		[exerciseId, secondaryExerciseId, id]
 	);
 	return result.rows[0] || null;
 };
@@ -413,7 +385,9 @@ module.exports = {
 	removeFavouriteEquipment,
 	searchEquipmentByName,
 	updateWeightStack,
-	updateEquipmentDetails,
+	updateEquipment,
+	stageExerciseMapping,
+	applyExerciseMapping,
 	getVariantsByEquipmentId,
 	createVariant,
 	deleteVariant

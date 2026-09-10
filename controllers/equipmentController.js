@@ -1,6 +1,5 @@
 const equipmentService = require('../services/equipmentService');
-const pool = require('../db');
-const { createNotification } = require('../routes/notificationsRoutes');
+const { createNotification } = require('../services/notificationService');
 
 const getAllEquipment = async (req, res) => {
 	try {
@@ -29,17 +28,8 @@ const getEquipmentById = async (req, res) => {
 
 const createEquipment = async (req, res) => {
 	try {
-		const {
-			brand,
-			series,
-			name,
-			type,
-			brand_id,
-			exercise_id,
-			secondary_exercise_id,
-			resistance_profile,
-			resistance_curve
-		} = req.body;
+		const { brand, series, name, type, brand_id, exercise_id, secondary_exercise_id,
+			resistance_profile, resistance_curve } = req.body;
 		const createdBy = req.user?.id || null;
 		const equipment = await equipmentService.createEquipment(
 			brand,
@@ -50,51 +40,23 @@ const createEquipment = async (req, res) => {
 			brand_id || null,
 			exercise_id || null,
 			secondary_exercise_id || null,
-			resistance_profile,
-			resistance_curve
+			resistance_profile ?? 'constant',
+			resistance_curve ?? null
 		);
 		if (createdBy) {
 			try {
-				await createNotification(pool, createdBy, 'submission_received', equipment.id, 'Your equipment submission is under review');
+				await createNotification(createdBy, 'submission_received', equipment.id, 'Your equipment submission is under review');
 			} catch (notifyErr) {
 				console.error('EQUIPMENT NOTIFICATION ERROR:', notifyErr);
 			}
 		}
 		res.status(201).json({ data: equipment });
 	} catch (err) {
-		if (err.message === 'brand and name are required') {
-			return res.status(400).json({ error: err.message });
-		}
-		if (
-			err.message === 'Invalid equipment type' ||
-			err.message === 'Invalid resistance profile' ||
-			err.message === 'Invalid resistance curve'
-		) {
+		if (/required|Invalid/.test(err.message)) {
 			return res.status(400).json({ error: err.message });
 		}
 		console.error('CREATE EQUIPMENT ERROR:', err);
 		res.status(500).json({ error: 'Failed to create equipment' });
-	}
-};
-
-const updateEquipmentDetails = async (req, res) => {
-	try {
-		const equipment = await equipmentService.updateEquipmentDetails(req.params.id, req.body);
-		res.json({ data: equipment });
-	} catch (err) {
-		if (err.message === 'Equipment not found') {
-			return res.status(404).json({ error: err.message });
-		}
-		if (
-			err.message === 'brand and name are required' ||
-			err.message === 'Invalid equipment type' ||
-			err.message === 'Invalid resistance profile' ||
-			err.message === 'Invalid resistance curve'
-		) {
-			return res.status(400).json({ error: err.message });
-		}
-		console.error('UPDATE EQUIPMENT DETAILS ERROR:', err);
-		res.status(500).json({ error: 'Failed to update equipment' });
 	}
 };
 
@@ -113,7 +75,7 @@ const getGymsWithEquipment = async (req, res) => {
 
 const searchEquipment = async (req, res) => {
 	try {
-		const results = await equipmentService.searchEquipment(req.query.query);
+		const results = await equipmentService.searchEquipment(req.query.q);
 		res.json({ data: results });
 	} catch (err) {
 		console.error('SEARCH EQUIPMENT ERROR:', err);
@@ -166,7 +128,7 @@ const uploadEquipmentImage = async (req, res) => {
 		// A replacement photo is staged as pending; only then notify the contributor it's under review.
 		if (result.status === 'pending' && userId) {
 			try {
-				await createNotification(pool, userId, 'submission_received', req.params.id, 'Your equipment photo update is under review');
+				await createNotification(userId, 'submission_received', req.params.id, 'Your equipment photo update is under review');
 			} catch (notifyErr) {
 				console.error('EQUIPMENT PHOTO NOTIFICATION ERROR:', notifyErr);
 			}
@@ -232,7 +194,7 @@ const updateWeightStack = async (req, res) => {
 		if (!result) return res.status(404).json({ error: 'Equipment not found or not pin loaded' });
 		if (submittedBy) {
 			try {
-				await createNotification(pool, submittedBy, 'submission_received', req.params.id, 'Your weight stack update is under review');
+				await createNotification(submittedBy, 'submission_received', req.params.id, 'Your weight stack update is under review');
 			} catch (notifyErr) {
 				console.error('WEIGHT STACK NOTIFICATION ERROR:', notifyErr);
 			}
@@ -241,6 +203,58 @@ const updateWeightStack = async (req, res) => {
 	} catch (err) {
 		console.error('UPDATE WEIGHT STACK ERROR:', err);
 		res.status(500).json({ error: 'Failed to update weight stack' });
+	}
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// exercises.id is a uuid. Returns null for "no exercise", undefined for malformed.
+const parseExerciseId = (value) => {
+	if (value === null || value === undefined || value === '') return null;
+	return typeof value === 'string' && UUID_RE.test(value) ? value : undefined;
+};
+
+const updateExerciseMapping = async (req, res) => {
+	try {
+		const { exercise_id, secondary_exercise_id } = req.body;
+		const exerciseId = parseExerciseId(exercise_id);
+		const secondaryExerciseId = parseExerciseId(secondary_exercise_id);
+		if (exerciseId === undefined || secondaryExerciseId === undefined) {
+			return res.status(400).json({ error: 'Invalid exercise id' });
+		}
+
+		const isSuperAdmin = req.user?.role === 'super_admin';
+		const submittedBy = req.user?.id || null;
+
+		const result = await equipmentService.updateExerciseMapping(
+			req.params.id,
+			exerciseId,
+			secondaryExerciseId,
+			isSuperAdmin,
+			submittedBy
+		);
+		if (!result) return res.status(404).json({ error: 'Equipment not found' });
+
+		if (!isSuperAdmin && submittedBy) {
+			try {
+				await createNotification(
+					submittedBy,
+					'submission_received',
+					req.params.id,
+					'Your exercise mapping change is under review'
+				);
+			} catch (notifyErr) {
+				console.error('EXERCISE MAPPING NOTIFICATION ERROR:', notifyErr);
+			}
+		}
+
+		res.json({ data: { id: result.id, review: isSuperAdmin ? 'approved' : 'pending' } });
+	} catch (err) {
+		if (/must differ|without a primary/.test(err.message)) {
+			return res.status(400).json({ error: err.message });
+		}
+		console.error('UPDATE EXERCISE MAPPING ERROR:', err);
+		res.status(500).json({ error: 'Failed to update exercise mapping' });
 	}
 };
 
@@ -267,7 +281,7 @@ const createVariant = async (req, res) => {
 		);
 		if (createdBy) {
 			try {
-				await createNotification(pool, createdBy, 'submission_received', req.params.id, 'Your variant submission is under review');
+				await createNotification(createdBy, 'submission_received', req.params.id, 'Your variant submission is under review');
 			} catch (notifyErr) {
 				console.error('VARIANT NOTIFICATION ERROR:', notifyErr);
 			}
@@ -310,7 +324,7 @@ module.exports = {
 	favouriteEquipment,
 	removeFavouriteEquipment,
 	updateWeightStack,
-	updateEquipmentDetails,
+	updateExerciseMapping,
 	getVariants,
 	createVariant,
 	deleteVariant

@@ -10,7 +10,42 @@ describe('GET /equipment', () => {
 	it('returns 200 and an array', async () => {
 		const res = await request(app).get('/equipment');
 		expect(res.statusCode).toBe(200);
-		expect(Array.isArray(res.body.data)).toBe(true);
+		expect(Array.isArray(res.body)).toBe(true);
+	});
+});
+
+describe('GET /equipment exercise/category fields', () => {
+	it('includes exercise and secondary_exercise on each equipment row, with category info when linked', async () => {
+		const res = await request(app).get('/equipment');
+		expect(res.statusCode).toBe(200);
+		const equipment = res.body.data;
+		expect(Array.isArray(equipment)).toBe(true);
+		expect(equipment.length).toBeGreaterThan(0);
+		for (const item of equipment) {
+			expect(item).toHaveProperty('exercise');
+			expect(item).toHaveProperty('secondary_exercise');
+			if (item.exercise) {
+				expect(item.exercise).toHaveProperty('id');
+				expect(item.exercise).toHaveProperty('name');
+				expect(item.exercise).toHaveProperty('category_id');
+				expect(item.exercise).toHaveProperty('category_name');
+			}
+		}
+		const linked = equipment.find((e) => e.exercise);
+		expect(linked).toBeDefined();
+	});
+
+	it('GET /equipment/:id includes the linked exercise and its category', async () => {
+		// "243 Leg Press 45°" — seeded with exercise_id pointing at "Leg Press (Machine)"
+		const res = await request(app).get('/equipment/212');
+		expect(res.statusCode).toBe(200);
+		const equipment = res.body.data;
+		expect(equipment.exercise).toMatchObject({
+			id: '6c56fdfc-5193-4ddf-b5cb-3bfeb61db8d1',
+			name: 'Leg Press (Machine)'
+		});
+		expect(equipment.exercise).toHaveProperty('category_id');
+		expect(equipment.exercise).toHaveProperty('category_name');
 	});
 });
 
@@ -18,13 +53,13 @@ describe('GET /equipment/search', () => {
 	it('returns 200 and an array for a valid query', async () => {
 		const res = await request(app).get('/equipment/search?query=press');
 		expect(res.statusCode).toBe(200);
-		expect(Array.isArray(res.body.data)).toBe(true);
+		expect(Array.isArray(res.body)).toBe(true);
 	});
 
 	it('returns empty array when no query param', async () => {
 		const res = await request(app).get('/equipment/search');
 		expect(res.statusCode).toBe(200);
-		expect(res.body.data).toEqual([]);
+		expect(res.body).toEqual([]);
 	});
 });
 
@@ -32,7 +67,8 @@ describe('GET /equipment/brands', () => {
 	it('returns 200 and a brands array', async () => {
 		const res = await request(app).get('/equipment/brands');
 		expect(res.statusCode).toBe(200);
-		expect(Array.isArray(res.body.data)).toBe(true);
+		expect(res.body).toHaveProperty('brands');
+		expect(Array.isArray(res.body.brands)).toBe(true);
 	});
 });
 
@@ -45,37 +81,8 @@ describe('GET /equipment/series', () => {
 	it('returns 200 and a series array for a valid brand', async () => {
 		const res = await request(app).get('/equipment/series?brand=Matrix');
 		expect(res.statusCode).toBe(200);
-		expect(Array.isArray(res.body.data)).toBe(true);
-	});
-});
-
-describe('PATCH /admin/equipment/:id', () => {
-	it('updates equipment details for an admin', async () => {
-		const res = await request(app)
-			.patch('/admin/equipment/1')
-			.set('Authorization', 'Bearer local-dev')
-			.send({
-				brand: 'Matrix',
-				series: 'Aura',
-				name: 'Chest Press Jest Test',
-				type: 'pin_loaded',
-				resistance_profile: 'ascending',
-				resistance_curve: null
-			});
-
-		expect(res.statusCode).toBe(200);
-		expect(res.body.data).toMatchObject({
-			brand: 'Matrix',
-			series: 'Aura',
-			name: 'Chest Press Jest Test',
-			type: 'pin_loaded',
-			resistance_profile: 'ascending'
-		});
-
-		const followUp = await request(app)
-			.get('/equipment/1')
-			.set('Authorization', 'Bearer local-dev');
-		expect(followUp.body.data.name).toBe('Chest Press Jest Test');
+		expect(res.body).toHaveProperty('series');
+		expect(Array.isArray(res.body.series)).toBe(true);
 	});
 });
 

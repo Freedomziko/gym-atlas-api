@@ -37,6 +37,11 @@ const getGymEquipment = async (gymId) => {
 	return await gymRepo.getGymEquipment(gymId);
 };
 
+const uploadGymImage = async (id, fileBuffer, mimeType, userId = null) => {
+	if (!fileBuffer) throw new Error('No image provided');
+	return await gymRepo.uploadGymImage(id, fileBuffer, mimeType, userId);
+};
+
 // Normalises a submitted Instagram handle (strips a leading @ and any URL
 // wrapping) before staging it for review.
 const updateInstagram = async (id, instagram, submittedBy = null) => {
@@ -57,6 +62,10 @@ const addGymEquipment = async (gymId, equipmentId, quantity, notes, status, crea
 
 const getGymStats = async () => {
 	return await gymRepo.getGymStats();
+};
+
+const getTickerSample = async () => {
+	return await gymRepo.getTickerSample();
 };
 
 // Decrement quantity if > 1, otherwise delete the row entirely
@@ -94,8 +103,9 @@ const searchGymsByMachines = async (filters) => {
 	return await gymRepo.searchGymsByMachines(filters);
 };
 
-const getEquipmentById = async (id) => {
-	return await gymRepo.getEquipmentById(id);
+const searchGymsByBrand = async (brandId) => {
+	if (!brandId) return await gymRepo.getGyms();
+	return await gymRepo.searchGymsByBrand(brandId);
 };
 
 module.exports = {
@@ -104,13 +114,15 @@ module.exports = {
 	createGym,
 	getGymEquipment,
 	updateInstagram,
+	uploadGymImage,
 	addGymEquipment,
 	getGymStats,
+	getTickerSample,
 	removeGymEquipment,
 	rateGym,
 	favouriteGym,
 	removeFavouriteGym,
 	getFavouriteGyms,
 	searchGymsByMachines,
-	getEquipmentById
+	searchGymsByBrand
 };

@@ -29,33 +29,9 @@ const verifyToken = async (token) => {
 	return data.user;
 };
 
-const getDevUser = () => {
-	if (!process.env.DEV_AUTH_USER_ID || process.env.NODE_ENV === 'production') return null;
-	return {
-		id: process.env.DEV_AUTH_USER_ID,
-		email: process.env.DEV_AUTH_EMAIL || 'local-admin@gymatlas.local'
-	};
-};
-
-const attachUser = async (req, user) => {
-	const profile = await getProfile(user.id);
-	req.user = {
-		id: user.id,
-		email: user.email,
-		username: profile.username,
-		role: profile.role
-	};
-};
-
 const authMiddleware = async (req, res, next) => {
 	const authHeader = req.headers.authorization;
 	if (!authHeader) return res.status(401).json({ error: 'No token' });
-
-	const devUser = getDevUser();
-	if (devUser) {
-		await attachUser(req, devUser);
-		return next();
-	}
 
 	const token = authHeader.split(' ')[1];
 	let supabaseUser;
@@ -65,19 +41,21 @@ const authMiddleware = async (req, res, next) => {
 		return res.status(401).json({ error: 'Invalid token' });
 	}
 
-	await attachUser(req, supabaseUser);
+	const profile = await getProfile(supabaseUser.id);
+
+	req.user = {
+		id: supabaseUser.id,
+		email: supabaseUser.email,
+		username: profile.username,
+		role: profile.role
+	};
+
 	next();
 };
 
 const optionalAuth = async (req, res, next) => {
 	const authHeader = req.headers.authorization;
 	if (!authHeader) return next();
-
-	const devUser = getDevUser();
-	if (devUser) {
-		await attachUser(req, devUser);
-		return next();
-	}
 
 	const token = authHeader.split(' ')[1];
 	let supabaseUser;
@@ -87,7 +65,14 @@ const optionalAuth = async (req, res, next) => {
 		return next();
 	}
 
-	await attachUser(req, supabaseUser);
+	const profile = await getProfile(supabaseUser.id);
+	req.user = {
+		id: supabaseUser.id,
+		email: supabaseUser.email,
+		username: profile.username,
+		role: profile.role
+	};
+
 	next();
 };
 

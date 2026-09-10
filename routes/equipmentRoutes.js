@@ -2,18 +2,7 @@ const express = require('express');
 const router = express.Router();
 const equipmentController = require('../controllers/equipmentController');
 const { authMiddleware, optionalAuth, adminMiddleware } = require('../middleware/auth');
-const multer = require('multer');
-const upload = multer({
-	storage: multer.memoryStorage(),
-	limits: { fileSize: 5 * 1024 * 1024 },
-	fileFilter: (_req, file, cb) => {
-		if (file.mimetype.startsWith('image/')) {
-			cb(null, true);
-		} else {
-			cb(new Error('Only images allowed'));
-		}
-	}
-});
+const { upload, handleUploadError } = require('../middleware/uploadConfig');
 
 // ── Image upload ──────────────────────────────────────────────────────────────
 router.post(
@@ -40,6 +29,15 @@ router.post('/:id/favourite', authMiddleware, equipmentController.favouriteEquip
 router.delete('/:id/favourite', authMiddleware, equipmentController.removeFavouriteEquipment);
 router.patch('/:id/weight-stack', authMiddleware, equipmentController.updateWeightStack);
 
+// Admins may retarget a machine's exercise mapping; only a super admin's edit
+// lands live, everyone else's is staged for confirmation (see adminRoutes).
+router.patch(
+	'/:id/exercise',
+	authMiddleware,
+	adminMiddleware,
+	equipmentController.updateExerciseMapping
+);
+
 // ── Variants ──────────────────────────────────────────────────────────────────
 router.get('/:id/variants', equipmentController.getVariants);
 router.post('/:id/variants', authMiddleware, equipmentController.createVariant);
@@ -48,11 +46,6 @@ router.delete('/variants/:variantId', authMiddleware, adminMiddleware, equipment
 // ── Single resource (must be last) ────────────────────────────────────────────
 router.get('/:id', optionalAuth, equipmentController.getEquipmentById);
 
-router.use((err, _req, res, next) => {
-	if (err.code === 'LIMIT_FILE_SIZE') {
-		return res.status(400).json({ error: 'File too large. Max 5MB.' });
-	}
-	next(err);
-});
+router.use(handleUploadError);
 
 module.exports = router;

@@ -1,7 +1,5 @@
 const gymService = require('../services/gymService');
-const gymRepo = require('../repositories/gymRepository');
-const pool = require('../db');
-const { createNotification } = require('../routes/notificationsRoutes');
+const { createNotification } = require('../services/notificationService');
 
 const getGyms = async (req, res) => {
 	try {
@@ -31,9 +29,8 @@ const getGymEquipment = async (req, res) => {
 const createGym = async (req, res) => {
 	try {
 		const { name, latitude, longitude, address, city, country, instagram } = req.body;
-		if (!name) return res.status(400).json({ error: 'Name is required' });
-		const createdBy = req.user?.id || null; 
-		const gym = await gymRepo.createGym(
+		const createdBy = req.user?.id || null;
+		const gym = await gymService.createGym(
 			name,
 			latitude,
 			longitude,
@@ -45,13 +42,16 @@ const createGym = async (req, res) => {
 		);
 		if (createdBy) {
 			try {
-				await createNotification(pool, createdBy, 'submission_received', gym.id, 'Your gym submission is under review');
+				await createNotification(createdBy, 'submission_received', gym.id, 'Your gym submission is under review');
 			} catch (notifyErr) {
 				console.error('GYM NOTIFICATION ERROR:', notifyErr);
 			}
 		}
 		res.status(201).json({ data: gym });
 	} catch (err) {
+		if (err.message === 'Name is required') {
+			return res.status(400).json({ error: err.message });
+		}
 		console.error('CREATE GYM ERROR:', err);
 		res.status(500).json({ error: 'Failed to create gym' });
 	}
@@ -66,7 +66,7 @@ const updateInstagram = async (req, res) => {
 		if (!result) return res.status(404).json({ error: 'Gym not found' });
 		if (submittedBy) {
 			try {
-				await createNotification(pool, submittedBy, 'submission_received', req.params.id, 'Your gym Instagram suggestion is under review');
+				await createNotification(submittedBy, 'submission_received', req.params.id, 'Your gym Instagram suggestion is under review');
 			} catch (notifyErr) {
 				console.error('GYM INSTAGRAM NOTIFICATION ERROR:', notifyErr);
 			}
@@ -117,6 +117,17 @@ const getGymStats = async (req, res) => {
 	}
 };
 
+// GET /gyms/ticker
+const getGymTicker = async (req, res) => {
+	try {
+		const entries = await gymService.getTickerSample();
+		res.json({ data: entries });
+	} catch (err) {
+		console.error('getGymTicker error:', err);
+		res.status(500).json({ error: 'Failed to fetch ticker sample' });
+	}
+};
+
 // DELETE /gyms/:gymId/equipment/:equipmentId
 const removeGymEquipment = async (req, res) => {
 	try {
@@ -136,10 +147,38 @@ const removeGymEquipment = async (req, res) => {
 };
 
 const getGymById = async (req, res) => {
-	const userId = req.user?.id || null;
-	const gym = await gymRepo.getGymById(req.params.id, userId);
-	if (!gym) return res.status(404).json({ error: 'Gym not found' });
-	res.json({ data: gym });
+	try {
+		const userId = req.user?.id || null;
+		const gym = await gymService.getGymById(req.params.id, userId);
+		res.json({ data: gym });
+	} catch (err) {
+		if (err.message === 'Gym not found') {
+			return res.status(404).json({ error: err.message });
+		}
+		console.error('GET GYM BY ID ERROR:', err);
+		res.status(500).json({ error: 'Failed to fetch gym' });
+	}
+};
+
+const uploadGymImage = async (req, res) => {
+	try {
+		if (!req.file) return res.status(400).json({ error: 'No image provided' });
+		const userId = req.user?.id || null;
+		const result = await gymService.uploadGymImage(req.params.id, req.file.buffer, req.file.mimetype, userId);
+		if (!result) return res.status(404).json({ error: 'Gym not found' });
+
+		if (result.photo_status === 'pending' && userId) {
+			try {
+				await createNotification(userId, 'submission_received', req.params.id, 'Your gym photo update is under review');
+			} catch (notifyErr) {
+				console.error('GYM PHOTO NOTIFICATION ERROR:', notifyErr);
+			}
+		}
+		res.json({ data: { image_url: result.image_url, status: result.photo_status } });
+	} catch (err) {
+		console.error('IMAGE UPLOAD ERROR:', err);
+		res.status(500).json({ error: 'Failed to upload image' });
+	}
 };
 const rateGym = async (req, res) => {
 	try {
@@ -218,9 +257,11 @@ const removeFavouriteGym = async (req, res) => {
 };
 const searchGyms = async (req, res) => {
 	try {
-		const { machines } = req.body;
+		const { machines, brand_id } = req.body;
 
-		const gyms = await gymService.searchGymsByMachines(machines);
+		const gyms = brand_id
+			? await gymService.searchGymsByBrand(brand_id)
+			: await gymService.searchGymsByMachines(machines);
 
 		res.json({ data: gyms });
 	} catch (err) {
@@ -235,9 +276,11 @@ module.exports = {
 	getGymEquipment,
 	addGymEquipment,
 	getGymStats,
+	getGymTicker,
 	removeGymEquipment,
 	createGym,
 	updateInstagram,
+	uploadGymImage,
 	rateGym,
 	favouriteGym,
 	removeFavouriteGym,

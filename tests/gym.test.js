@@ -10,7 +10,7 @@ describe('GET /gyms', () => {
 	it('returns 200 and an array', async () => {
 		const res = await request(app).get('/gyms');
 		expect(res.statusCode).toBe(200);
-		expect(Array.isArray(res.body.data)).toBe(true);
+		expect(Array.isArray(res.body)).toBe(true);
 	});
 });
 

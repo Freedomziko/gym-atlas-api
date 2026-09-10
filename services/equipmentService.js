@@ -10,22 +10,6 @@ const getEquipmentById = async (id, userId = null) => {
 	return equipment;
 };
 
-const EQUIPMENT_TYPES = ['pin_loaded', 'plate_loaded'];
-const RESISTANCE_PROFILES = ['constant', 'ascending', 'descending', 'adjustable', 'custom'];
-
-const validateEquipmentDetails = ({ brand, series, name, type, resistance_profile, resistance_curve }) => {
-	if (!brand || !name) throw new Error('brand and name are required');
-	if (type && !EQUIPMENT_TYPES.includes(type)) throw new Error('Invalid equipment type');
-	if (resistance_profile && !RESISTANCE_PROFILES.includes(resistance_profile)) {
-		throw new Error('Invalid resistance profile');
-	}
-	if (resistance_curve !== undefined && resistance_curve !== null) {
-		if (!Array.isArray(resistance_curve) || resistance_curve.some((value) => typeof value !== 'number')) {
-			throw new Error('Invalid resistance curve');
-		}
-	}
-};
-
 const createEquipment = async (
 	brand,
 	series,
@@ -38,14 +22,8 @@ const createEquipment = async (
 	resistanceProfile = 'constant',
 	resistanceCurve = null
 ) => {
-	validateEquipmentDetails({
-		brand,
-		series,
-		name,
-		type: type || 'pin_loaded',
-		resistance_profile: resistanceProfile,
-		resistance_curve: resistanceCurve
-	});
+	if (!brand || !name) throw new Error('brand and name are required');
+	validateResistance(resistanceProfile, resistanceCurve);
 	return await equipmentRepo.createEquipment(
 		brand,
 		series || null,
@@ -56,7 +34,7 @@ const createEquipment = async (
 		exerciseId,
 		secondaryExerciseId,
 		resistanceProfile,
-		resistanceCurve
+		resistanceProfile === 'custom' ? resistanceCurve : null
 	);
 };
 
@@ -110,18 +88,39 @@ const updateWeightStack = async (id, weightStack, submittedBy = null) => {
 	return await equipmentRepo.updateWeightStack(id, weightStack, submittedBy);
 };
 
-const updateEquipmentDetails = async (id, fields) => {
-	validateEquipmentDetails(fields);
-	const equipment = await equipmentRepo.updateEquipmentDetails(id, {
-		brand: fields.brand.trim(),
-		series: fields.series?.trim() || null,
-		name: fields.name.trim(),
-		type: fields.type,
-		resistance_profile: fields.resistance_profile || 'constant',
-		resistance_curve: fields.resistance_profile === 'custom' ? fields.resistance_curve || null : null
-	});
-	if (!equipment) throw new Error('Equipment not found');
-	return equipment;
+const RESISTANCE_PROFILES = ['constant', 'ascending', 'descending', 'adjustable', 'custom'];
+
+const validateResistance = (profile, curve) => {
+	if (profile != null && !RESISTANCE_PROFILES.includes(profile)) {
+		throw new Error('Invalid resistance_profile');
+	}
+	if (curve != null && (!Array.isArray(curve) || curve.some(value => !Number.isFinite(value)))) {
+		throw new Error('Invalid resistance_curve');
+	}
+};
+
+const updateEquipment = async (id, fields) => {
+	const { brand, name, type, resistanceProfile } = fields;
+	if (!brand || !name) throw new Error('brand and name are required');
+	if (type && !['pin_loaded', 'plate_loaded'].includes(type)) {
+		throw new Error('Invalid type');
+	}
+	validateResistance(resistanceProfile, fields.resistanceCurve);
+	return await equipmentRepo.updateEquipment(id, fields);
+};
+
+// Admins may retarget a machine's exercise mapping, but only a super admin's
+// edit lands live — everyone else's is staged for confirmation.
+const updateExerciseMapping = async (id, exerciseId, secondaryExerciseId, applyDirectly, submittedBy = null) => {
+	if (secondaryExerciseId !== null && exerciseId === null) {
+		throw new Error('Cannot set a secondary exercise without a primary');
+	}
+	if (exerciseId !== null && exerciseId === secondaryExerciseId) {
+		throw new Error('Primary and secondary exercise must differ');
+	}
+	return applyDirectly
+		? await equipmentRepo.applyExerciseMapping(id, exerciseId, secondaryExerciseId)
+		: await equipmentRepo.stageExerciseMapping(id, exerciseId, secondaryExerciseId, submittedBy);
 };
 
 const VARIATION_TYPES = ['grip', 'unilateral', 'incline'];
@@ -158,7 +157,8 @@ module.exports = {
 	favouriteEquipment,
 	removeFavouriteEquipment,
 	updateWeightStack,
-	updateEquipmentDetails,
+	updateEquipment,
+	updateExerciseMapping,
 	getVariants,
 	createVariant,
 	deleteVariant

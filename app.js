@@ -7,7 +7,7 @@ const gymRoutes = require('./routes/gymRoutes');
 const equipmentRoutes = require('./routes/equipmentRoutes');
 const userRoutes = require('./routes/userRoutes');
 const leaderboardRoutes = require('./routes/leaderboardRoutes');
-const { router: notificationsRoutes } = require('./routes/notificationsRoutes');
+const notificationsRoutes = require('./routes/notificationsRoutes');
 const bestInClassRoutes = require('./routes/bestInClassRoutes');
 const brandRoutes = require('./routes/brandRoutes');
 const exercisesRoutes = require('./routes/exercisesRoutes');
@@ -21,6 +21,7 @@ const corsOptions = {
 	  if (!origin || allowed.includes(origin) || origin.endsWith('.vercel.app')) {
 		callback(null, true);
 	  } else {
+		console.error(`CORS rejected origin: ${origin} (allowed: ${allowed.join(', ')})`);
 		callback(new Error('Not allowed by CORS'));
 	  }
 	}

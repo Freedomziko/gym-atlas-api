@@ -1,56 +1,8 @@
 const pool = require('../db');
 const { findPlaceId, fetchPlaceHours } = require('../services/placesService');
-
-const usesDevDb = () => process.env.USE_PG_MEM === 'true';
+const { uploadToCloudinary } = require('../config/cloudinary');
 
 const getGyms = async (userId = null) => {
-	if (usesDevDb()) {
-		const result = await pool.query(
-			`
-			SELECT
-				g.id,
-				g.name,
-				g.city,
-				g.country,
-				g.image_url,
-				g.latitude AS lat,
-				g.longitude AS lng,
-				COALESCE(eq.total_equipment, 0)::INT AS total_equipment,
-				COALESCE(eq.unique_machines, 0)::INT AS unique_machines,
-				COALESCE(ROUND(gr.avg_rating, 1), 0) AS avg_rating,
-				gr.user_rating,
-				COALESCE(gf.favourites, 0)::INT AS favourites,
-				g.opening_hours,
-				g.hours_updated_at
-			FROM gyms g
-			LEFT JOIN (
-				SELECT gym_id,
-					SUM(quantity) AS total_equipment,
-					COUNT(DISTINCT equipment_id) AS unique_machines
-				FROM gym_equipment
-				WHERE status = 'approved'
-				GROUP BY gym_id
-			) eq ON eq.gym_id = g.id
-			LEFT JOIN (
-				SELECT gym_id,
-					AVG(rating) AS avg_rating,
-					MAX(CASE WHEN user_id = $1 THEN rating END) AS user_rating
-				FROM gym_ratings
-				GROUP BY gym_id
-			) gr ON gr.gym_id = g.id
-			LEFT JOIN (
-				SELECT gym_id,
-					COUNT(*) AS favourites
-				FROM gym_favourites
-				GROUP BY gym_id
-			) gf ON gf.gym_id = g.id
-			WHERE g.status = 'approved'
-			`,
-			[userId]
-		);
-		return result.rows.map((row) => ({ ...row, equipment_images: [] }));
-	}
-
 	const result = await pool.query(
 		`
         SELECT
@@ -108,58 +60,6 @@ const getGyms = async (userId = null) => {
 
 // Keep open for admin preview (no status filter)
 const getGymById = async (id, userId = null) => {
-	if (usesDevDb()) {
-		const result = await pool.query(
-			`
-			SELECT
-				g.id,
-				g.name,
-				g.slug,
-				g.address,
-				g.city,
-				g.country,
-				g.latitude AS lat,
-				g.longitude AS lng,
-				g.instagram,
-				g.image_url,
-				g.created_at,
-				g.status,
-				COALESCE(eq.total_equipment, 0)::INT AS total_equipment,
-				COALESCE(eq.unique_machines, 0)::INT AS unique_machines,
-				COALESCE(ROUND(gr.avg_rating, 1), 0) AS rating,
-				COALESCE(gf.favourites, 0)::INT AS favourites,
-				COALESCE(gf.is_favorite, false) AS is_favorite,
-				g.opening_hours,
-				g.hours_updated_at
-			FROM gyms g
-			LEFT JOIN (
-				SELECT gym_id,
-					SUM(quantity) AS total_equipment,
-					COUNT(DISTINCT equipment_id) AS unique_machines
-				FROM gym_equipment
-				GROUP BY gym_id
-			) eq ON eq.gym_id = g.id
-			LEFT JOIN (
-				SELECT gym_id,
-					AVG(rating) AS avg_rating
-				FROM gym_ratings
-				GROUP BY gym_id
-			) gr ON gr.gym_id = g.id
-			LEFT JOIN (
-				SELECT gym_id,
-					COUNT(*) AS favourites,
-					BOOL_OR(user_id = $2 AND $2 IS NOT NULL) AS is_favorite
-				FROM gym_favourites
-				GROUP BY gym_id
-			) gf ON gf.gym_id = g.id
-			WHERE g.id = $1
-			`,
-			[id, userId]
-		);
-		const row = result.rows[0] || null;
-		return row ? { ...row, equipment_images: [] } : null;
-	}
-
 	const result = await pool.query(
 		`
         SELECT 
@@ -257,7 +157,8 @@ const createGym = async (
 
 // First photo (image_url IS NULL) goes live instantly; a replacement is staged in
 // pending_image_url and left for admin approval so the live image is never clobbered.
-const uploadGymImage = async (id, url, userId = null) => {
+const uploadGymImage = async (id, fileBuffer, mimeType, userId = null) => {
+	const url = await uploadToCloudinary(fileBuffer, mimeType, 'gyms');
 	const result = await pool.query(
 		`UPDATE gyms SET
 			image_url         = CASE WHEN image_url IS NULL THEN $1 ELSE image_url END,
@@ -335,6 +236,53 @@ const addGymEquipment = async (
 	return result.rows[0];
 };
 
+// GET /gyms/ticker — small random sample of approved gyms + gym equipment,
+// mixed together for the landing-page coordinate ticker. No pagination needed.
+const getTickerSample = async () => {
+	const gymsResult = await pool.query(
+		`
+		SELECT name, latitude AS lat, longitude AS lng
+		FROM gyms
+		WHERE status = 'approved'
+		  AND latitude IS NOT NULL
+		  AND longitude IS NOT NULL
+		ORDER BY RANDOM()
+		LIMIT 7
+		`
+	);
+
+	const equipmentResult = await pool.query(
+		`
+		SELECT
+			CONCAT_WS(' ', e.brand, e.series, e.name) AS name,
+			g.latitude AS lat,
+			g.longitude AS lng
+		FROM gym_equipment ge
+		JOIN gyms g ON g.id = ge.gym_id
+		JOIN equipment e ON e.id = ge.equipment_id
+		WHERE ge.status = 'approved'
+		  AND g.status = 'approved'
+		  AND e.status = 'approved'
+		  AND g.latitude IS NOT NULL
+		  AND g.longitude IS NOT NULL
+		ORDER BY RANDOM()
+		LIMIT 7
+		`
+	);
+
+	const entries = [
+		...gymsResult.rows.map((r) => ({ type: 'gym', name: r.name, lat: r.lat, lng: r.lng })),
+		...equipmentResult.rows.map((r) => ({ type: 'equipment', name: r.name, lat: r.lat, lng: r.lng }))
+	];
+
+	for (let i = entries.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[entries[i], entries[j]] = [entries[j], entries[i]];
+	}
+
+	return entries;
+};
+
 const getGymStats = async () => {
 	const result = await pool.query(
 		`
@@ -387,11 +335,6 @@ const deleteGymEquipment = async (gymId, equipmentId) => {
 		`,
 		[gymId, equipmentId]
 	);
-	return result.rows[0] || null;
-};
-
-const getEquipmentById = async (id) => {
-	const result = await pool.query(`SELECT * FROM equipment WHERE id = $1`, [id]);
 	return result.rows[0] || null;
 };
 
@@ -462,6 +405,34 @@ const searchGymsByMachines = async (filters) => {
 	return result.rows;
 };
 
+// Broad "has ANY equipment from this brand" match — unlike searchGymsByMachines
+// there's no HAVING COUNT requirement, since one brand can match many machines per gym.
+const searchGymsByBrand = async (brandId) => {
+	const result = await pool.query(
+		`
+		SELECT
+			g.id,
+			g.name,
+			g.latitude AS lat,
+			g.longitude AS lng,
+			COALESCE(SUM(ge.quantity), 0)::INT AS total_equipment,
+			COUNT(DISTINCT ge.equipment_id)::INT AS unique_machines,
+			COALESCE(ROUND(AVG(gr.rating), 1), 0)::FLOAT AS rating,
+			COUNT(DISTINCT gf.user_id)::INT AS favourites
+		FROM gyms g
+		JOIN gym_equipment ge ON ge.gym_id = g.id
+		JOIN equipment e ON e.id = ge.equipment_id
+		LEFT JOIN gym_ratings gr ON gr.gym_id = g.id
+		LEFT JOIN gym_favourites gf ON gf.gym_id = g.id
+		WHERE e.brand_id = $1
+		AND g.status = 'approved'
+		GROUP BY g.id
+		`,
+		[brandId]
+	);
+	return result.rows;
+};
+
 const getFavouriteGyms = async (userId) => {
 	const result = await pool.query(
 		`
@@ -486,12 +457,13 @@ module.exports = {
 	getGymEquipment,
 	addGymEquipment,
 	getGymStats,
+	getTickerSample,
 	decrementGymEquipment,
 	deleteGymEquipment,
-	getEquipmentById,
 	rateGym,
 	favouriteGym,
 	removeFavouriteGym,
 	searchGymsByMachines,
+	searchGymsByBrand,
 	getFavouriteGyms
 };

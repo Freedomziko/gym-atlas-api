@@ -1,5 +1,5 @@
 const pool = require('../db');
-const { uploadToAzure } = require('../config/azureStorage');
+const { uploadToCloudinary } = require('../config/cloudinary');
 
 const getBrands = async () => {
 	const result = await pool.query(`
@@ -41,7 +41,7 @@ const createBrand = async (name, slug) => {
 };
 
 const uploadBrandLogo = async (id, fileBuffer, mimeType) => {
-	const url = await uploadToAzure(fileBuffer, mimeType, 'brands');
+	const url = await uploadToCloudinary(fileBuffer, mimeType, 'brands');
 	const result = await pool.query(
 		`UPDATE brands SET logo_url = $1 WHERE id = $2 RETURNING *`,
 		[url, id]
